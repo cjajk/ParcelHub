@@ -11,25 +11,34 @@ import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
+import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.asImageBitmap
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.hapticfeedback.HapticFeedbackType
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.roundToPx
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.cjajk.parcelhub.data.PackageRecord
@@ -39,6 +48,8 @@ import com.cjajk.parcelhub.util.DeepLinks
 import com.cjajk.parcelhub.util.ExpressQuery
 import com.cjajk.parcelhub.util.ExpressResult
 import com.cjajk.parcelhub.util.COM_LIST
+import dev.chrisbanes.haze.HazeState
+import dev.chrisbanes.haze.hazeChild
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -52,6 +63,25 @@ val TextSecondary = Color(0xFF98989F)
 val CodeGreen = Color(0xFF30D158)
 val AccentBlue = Color(0xFF0A84FF)
 
+data class Platform(
+    val id: String,
+    val packages: List<String>,
+    val label: String,
+    val fallbackIcon: String,
+    val fallbackBg: Color,
+    val onClick: (Context) -> Unit
+)
+
+private fun defaultPlatforms(context: Context) = listOf(
+    Platform("taobao", listOf("com.taobao.taobao"), "淘宝", "淘", Color(0xFFFF6A00)) { DeepLinks.openTaobaoIdentity(it) },
+    Platform("pdd", listOf("com.xunmeng.pinduoduo"), "拼多多", "拼", Color(0xFFE2231A)) { DeepLinks.openPddPickup(it) },
+    Platform("cainiao", listOf("com.eg.android.AlipayGphone"), "菜鸟", "菜", Color(0xFF1E88E5)) { DeepLinks.openAlipayCainiao(it) },
+    Platform("sf", listOf("com.sf.activity", "com.sfexpress.activity"), "顺丰", "顺", Color(0xFF8E8E93)) { DeepLinks.openSf(it) },
+    Platform("jd", listOf("com.jingdong.app.mall"), "京东", "JD", Color(0xFFE1251B)) { DeepLinks.openJd(it) }
+)
+
+private const val SP_ORDER = "platform_order"
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun MainScreen(vm: MainViewModel) {
@@ -59,9 +89,11 @@ fun MainScreen(vm: MainViewModel) {
     val packages by vm.packages.collectAsState()
     var tab by remember { mutableIntStateOf(0) }
     var showSearch by remember { mutableStateOf(false) }
+    var showAdd by remember { mutableStateOf(false) }
     var queryResult by remember { mutableStateOf<ExpressResult?>(null) }
     var queryLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val hazeState = remember { HazeState() }
 
     DisposableEffect(Unit) {
         val filter = IntentFilter(SmsReceiver.ACTION_PACKAGE_ARRIVED)
@@ -79,13 +111,13 @@ fun MainScreen(vm: MainViewModel) {
 
     Scaffold(
         containerColor = BgBlack,
-        bottomBar = { GlassBottomBar() }
+        bottomBar = { GlassBottomBar(hazeState) }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
-                    .padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 8.dp),
+                    .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
                 Text(
@@ -95,9 +127,13 @@ fun MainScreen(vm: MainViewModel) {
                     color = TextPrimary,
                     modifier = Modifier.weight(1f)
                 )
+                IconButton(onClick = { showAdd = true }) {
+                    Icon(Icons.Default.Add, contentDescription = "手动添加", tint = TextPrimary,
+                        modifier = Modifier.size(28.dp))
+                }
                 IconButton(onClick = { showSearch = true }) {
-                    Icon(Icons.Default.Search, contentDescription = "查询快递",
-                        tint = TextPrimary, modifier = Modifier.size(28.dp))
+                    Icon(Icons.Default.Search, contentDescription = "查询快递", tint = TextPrimary,
+                        modifier = Modifier.size(28.dp))
                 }
             }
 
@@ -117,14 +153,20 @@ fun MainScreen(vm: MainViewModel) {
             ) {
                 if (queryResult != null) {
                     item(key = "express_query") {
-                        ExpressQueryCard(queryResult!!, onDismiss = { queryResult = null })
+                        ExpressQueryCard(queryResult!!, onDismiss = { queryResult = null },
+                            onSave = {
+                                vm.addManual(queryResult!!.nu, queryResult!!.com, "")
+                                Toast.makeText(context, "已保存到列表", Toast.LENGTH_SHORT).show()
+                                queryResult = null
+                            })
                     }
                 }
                 if (list.isEmpty() && queryResult == null) {
                     item { EmptyHint(tab) }
                 }
                 items(list, key = { it.id }) { item ->
-                    PackageCard(item, onToggle = { vm.togglePickedUp(item) })
+                    PackageCard(item, onToggle = { vm.togglePickedUp(item) },
+                        onDelete = { vm.delete(item) })
                 }
             }
         }
@@ -149,6 +191,52 @@ fun MainScreen(vm: MainViewModel) {
             }
         )
     }
+
+    if (showAdd) {
+        AddManualDialog(
+            onDismiss = { showAdd = false },
+            onAdd = { code, station, carrier ->
+                showAdd = false
+                vm.addManual(code, station, carrier)
+                Toast.makeText(context, "已添加", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun AddManualDialog(onDismiss: () -> Unit, onAdd: (String, String, String) -> Unit) {
+    var code by remember { mutableStateOf("") }
+    var station by remember { mutableStateOf("") }
+    var carrier by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardDark,
+        title = { Text("手动添加取件码", color = TextPrimary, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                OutlinedTextField(value = code, onValueChange = { code = it },
+                    label = { Text("取件码（如 3-2-501）") }, singleLine = true,
+                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = station, onValueChange = { station = it },
+                    label = { Text("取件地址（驿站/柜机名）") }, singleLine = true,
+                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = carrier, onValueChange = { carrier = it },
+                    label = { Text("快递公司（可选）") }, singleLine = true,
+                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (code.isNotBlank()) onAdd(code.trim(), station.trim(), carrier.trim()) },
+                enabled = code.isNotBlank()) {
+                Text("添加", color = AccentBlue, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -163,57 +251,23 @@ private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (Stri
         title = { Text("查询快递", color = TextPrimary, fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                OutlinedTextField(
-                    value = text,
-                    onValueChange = { text = it },
-                    label = { Text("输入快递单号") },
-                    singleLine = true,
-                    shape = RoundedCornerShape(12.dp),
-                    colors = OutlinedTextFieldDefaults.colors(
-                        focusedTextColor = TextPrimary,
-                        unfocusedTextColor = TextPrimary,
-                        focusedBorderColor = AccentBlue,
-                        unfocusedBorderColor = BorderGray,
-                        focusedLabelColor = AccentBlue,
-                        unfocusedLabelColor = TextSecondary,
-                        cursorColor = AccentBlue
-                    )
-                )
+                OutlinedTextField(value = text, onValueChange = { text = it },
+                    label = { Text("输入快递单号") }, singleLine = true,
+                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
                 Spacer(Modifier.height(12.dp))
-                ExposedDropdownMenuBox(
-                    expanded = expanded,
-                    onExpandedChange = { expanded = it }
-                ) {
+                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
                     OutlinedTextField(
                         value = selectedCom?.second ?: "自动识别（可选）",
-                        onValueChange = {},
-                        readOnly = true,
+                        onValueChange = {}, readOnly = true,
                         label = { Text("快递公司") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
                         modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp),
-                        colors = OutlinedTextFieldDefaults.colors(
-                            focusedTextColor = TextPrimary,
-                            unfocusedTextColor = TextSecondary,
-                            focusedBorderColor = AccentBlue,
-                            unfocusedBorderColor = BorderGray,
-                            focusedLabelColor = AccentBlue,
-                            unfocusedLabelColor = TextSecondary
-                        )
-                    )
-                    ExposedDropdownMenu(
-                        expanded = expanded,
-                        onDismissRequest = { expanded = false },
-                        containerColor = CardDark
-                    ) {
+                        shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
+                        containerColor = CardDark) {
                         COM_LIST.forEach { item ->
-                            DropdownMenuItem(
-                                text = { Text(item.second, color = TextPrimary) },
-                                onClick = {
-                                    selectedCom = item
-                                    expanded = false
-                                }
-                            )
+                            DropdownMenuItem(text = { Text(item.second, color = TextPrimary) },
+                                onClick = { selectedCom = item; expanded = false })
                         }
                     }
                 }
@@ -228,19 +282,25 @@ private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (Stri
             }
         },
         confirmButton = {
-            TextButton(
-                onClick = { if (text.isNotBlank()) onQuery(text.trim(), selectedCom?.first) },
-                enabled = text.isNotBlank() && !loading
-            ) { Text("查询", color = AccentBlue, fontWeight = FontWeight.Bold) }
+            TextButton(onClick = { if (text.isNotBlank()) onQuery(text.trim(), selectedCom?.first) },
+                enabled = text.isNotBlank() && !loading) {
+                Text("查询", color = AccentBlue, fontWeight = FontWeight.Bold)
+            }
         },
-        dismissButton = {
-            TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
-        }
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) } }
     )
 }
 
 @Composable
-private fun ExpressQueryCard(result: ExpressResult, onDismiss: () -> Unit) {
+private fun darkFieldColors() = OutlinedTextFieldDefaults.colors(
+    focusedTextColor = TextPrimary, unfocusedTextColor = TextPrimary,
+    focusedBorderColor = AccentBlue, unfocusedBorderColor = BorderGray,
+    focusedLabelColor = AccentBlue, unfocusedLabelColor = TextSecondary,
+    cursorColor = AccentBlue
+)
+
+@Composable
+private fun ExpressQueryCard(result: ExpressResult, onDismiss: () -> Unit, onSave: () -> Unit) {
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -249,35 +309,16 @@ private fun ExpressQueryCard(result: ExpressResult, onDismiss: () -> Unit) {
     ) {
         Column(modifier = Modifier.padding(20.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(
-                    result.com,
-                    fontSize = 18.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    modifier = Modifier.weight(1f)
-                )
-                Box(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(8.dp))
-                        .background(
-                            when (result.state) {
-                                3 -> Color(0xFF30D158).copy(alpha = 0.15f)
-                                5 -> Color(0xFFFF9F0A).copy(alpha = 0.15f)
-                                else -> Color(0xFF0A84FF).copy(alpha = 0.15f)
-                            }
-                        )
-                        .padding(horizontal = 10.dp, vertical = 4.dp)
-                ) {
-                    Text(
-                        result.stateText,
-                        fontSize = 12.sp,
-                        fontWeight = FontWeight.Medium,
-                        color = when (result.state) {
-                            3 -> CodeGreen
-                            5 -> Color(0xFFFF9F0A)
-                            else -> AccentBlue
-                        }
-                    )
+                Text(result.com, fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary,
+                    modifier = Modifier.weight(1f))
+                Box(modifier = Modifier.clip(RoundedCornerShape(8.dp))
+                    .background(when (result.state) {
+                        3 -> CodeGreen.copy(alpha = 0.15f)
+                        5 -> Color(0xFFFF9F0A).copy(alpha = 0.15f)
+                        else -> AccentBlue.copy(alpha = 0.15f)
+                    }).padding(horizontal = 10.dp, vertical = 4.dp)) {
+                    Text(result.stateText, fontSize = 12.sp, fontWeight = FontWeight.Medium,
+                        color = when (result.state) { 3 -> CodeGreen; 5 -> Color(0xFFFF9F0A); else -> AccentBlue })
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -286,36 +327,41 @@ private fun ExpressQueryCard(result: ExpressResult, onDismiss: () -> Unit) {
             Text(result.latestContext, fontSize = 15.sp, color = TextPrimary)
             Spacer(Modifier.height(4.dp))
             Text(result.latestTime, fontSize = 12.sp, color = TextSecondary)
-
             if (result.estimatedDays != null && result.state != 3) {
                 Spacer(Modifier.height(12.dp))
-                Row(
-                    modifier = Modifier
-                        .clip(RoundedCornerShape(10.dp))
-                        .background(AccentBlue.copy(alpha = 0.12f))
-                        .padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically
-                ) {
-                    Text(
-                        if (result.estimatedDays <= 0) "预计今天送达"
+                Row(modifier = Modifier.clip(RoundedCornerShape(10.dp))
+                    .background(AccentBlue.copy(alpha = 0.12f)).padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text(if (result.estimatedDays <= 0) "预计今天送达"
                         else if (result.estimatedDays == 1) "预计明天送达"
                         else "预计 ${result.estimatedDays} 天后送达",
-                        fontSize = 14.sp,
-                        color = AccentBlue,
-                        fontWeight = FontWeight.Medium
-                    )
+                        fontSize = 14.sp, color = AccentBlue, fontWeight = FontWeight.Medium)
                 }
             }
-
             Spacer(Modifier.height(8.dp))
-            TextButton(onClick = onDismiss) { Text("关闭", color = TextSecondary, fontSize = 13.sp) }
+            Row {
+                TextButton(onClick = onSave) { Text("保存到列表", color = AccentBlue, fontSize = 13.sp) }
+                Spacer(Modifier.weight(1f))
+                TextButton(onClick = onDismiss) { Text("关闭", color = TextSecondary, fontSize = 13.sp) }
+            }
         }
     }
 }
 
 @Composable
-private fun GlassBottomBar() {
+private fun GlassBottomBar(hazeState: HazeState) {
     val context = LocalContext.current
+    val haptic = LocalHapticFeedback.current
+    val allPlatforms = defaultPlatforms(context)
+
+    val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
+    var order by remember {
+        mutableStateOf(
+            sp.getString(SP_ORDER, null)?.split(",")?.filter { id -> allPlatforms.any { it.id == id } }
+                ?: allPlatforms.map { it.id }
+        )
+    }
+    val orderedPlatforms = order.map { id -> allPlatforms.first { it.id == id } }
+
     Box(
         modifier = Modifier
             .fillMaxWidth()
@@ -325,107 +371,107 @@ private fun GlassBottomBar() {
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(32.dp))
-                .background(BarDark)
+                .background(BarDark.copy(alpha = 0.85f))
+                .hazeChild(hazeState)
                 .border(1.dp, BorderGray, RoundedCornerShape(32.dp))
                 .padding(vertical = 14.dp, horizontal = 12.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            PlatformBtn(packages = listOf("com.taobao.taobao"), label = "淘宝", fallbackIcon = "淘", fallbackBg = Color(0xFFFF6A00)) { DeepLinks.openTaobaoIdentity(context) }
-            PlatformBtn(packages = listOf("com.xunmeng.pinduoduo"), label = "拼多多", fallbackIcon = "拼", fallbackBg = Color(0xFFE2231A)) { DeepLinks.openPddPickup(context) }
-            PlatformBtn(packages = listOf("com.eg.android.AlipayGphone"), label = "菜鸟", fallbackIcon = "菜", fallbackBg = Color(0xFF1E88E5)) { DeepLinks.openAlipayCainiao(context) }
-            PlatformBtn(packages = listOf("com.sf.activity", "com.sfexpress.activity"), label = "顺丰", fallbackIcon = "顺", fallbackBg = Color(0xFF8E8E93)) { DeepLinks.openSf(context) }
-            PlatformBtn(packages = listOf("com.jingdong.app.mall"), label = "京东", fallbackIcon = "JD", fallbackBg = Color(0xFFE1251B)) { DeepLinks.openJd(context) }
+            orderedPlatforms.forEach { platform ->
+                DraggablePlatformBtn(platform = platform,
+                    onDragStart = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) })
+            }
         }
     }
 }
 
 @Composable
-private fun PlatformBtn(
-    packages: List<String>,
-    label: String,
-    fallbackIcon: String,
-    fallbackBg: Color,
-    onClick: () -> Unit
-) {
+private fun DraggablePlatformBtn(platform: Platform, onDragStart: () -> Unit) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val iconSizePx = with(density) { 44.dp.roundToPx() }
-    val appIcon: Drawable? = remember(packages) { loadAppIcon(context, packages) }
+    val appIcon: Drawable? = remember(platform.packages) { loadAppIcon(context, platform.packages) }
     val iconBitmap = remember(appIcon, iconSizePx) {
         appIcon?.let { runCatching { it.toBitmap(iconSizePx, iconSizePx) }.getOrNull() }
     }
+    var dragging by remember { mutableStateOf(false) }
+    var dragX by remember { mutableFloatStateOf(0f) }
+
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier.clickable(onClick = onClick)
-    ) {
-        Box(
-            modifier = Modifier.size(44.dp),
-            contentAlignment = Alignment.Center
-        ) {
-            if (iconBitmap != null) {
-                Image(
-                    bitmap = iconBitmap.asImageBitmap(),
-                    contentDescription = label,
-                    modifier = Modifier.size(44.dp)
+        modifier = Modifier
+            .pointerInput(platform.id) {
+                detectDragGesturesAfterLongPress(
+                    onDragStart = { onDragStart(); dragging = true },
+                    onDrag = { change, dragAmount ->
+                        change.consume()
+                        dragX += dragAmount.x
+                    },
+                    onDragEnd = { dragging = false; dragX = 0f },
+                    onDragCancel = { dragging = false; dragX = 0f }
                 )
+            }
+            .clickable { platform.onClick(context) }
+            .graphicsLayer {
+                translationX = if (dragging) dragX else 0f
+                scaleX = if (dragging) 1.15f else 1f
+                scaleY = if (dragging) 1.15f else 1f
+                alpha = if (dragging) 0.9f else 1f
+            }
+    ) {
+        Box(modifier = Modifier.size(46.dp), contentAlignment = Alignment.Center) {
+            if (iconBitmap != null) {
+                Image(bitmap = iconBitmap.asImageBitmap(), contentDescription = platform.label,
+                    modifier = Modifier.size(44.dp))
             } else {
-                Box(
-                    modifier = Modifier
-                        .size(44.dp)
-                        .clip(CircleShape)
-                        .background(fallbackBg),
-                    contentAlignment = Alignment.Center
-                ) {
-                    Text(
-                        fallbackIcon,
-                        color = Color.White,
-                        fontWeight = FontWeight.Bold,
-                        fontSize = if (fallbackIcon.length > 1) 13.sp else 16.sp
-                    )
+                Box(modifier = Modifier.size(44.dp).clip(CircleShape).background(platform.fallbackBg),
+                    contentAlignment = Alignment.Center) {
+                    Text(platform.fallbackIcon, color = Color.White, fontWeight = FontWeight.Bold,
+                        fontSize = if (platform.fallbackIcon.length > 1) 13.sp else 16.sp)
                 }
             }
         }
         Spacer(Modifier.height(6.dp))
-        Text(label, fontSize = 11.sp, color = TextSecondary)
+        Text(platform.label, fontSize = 11.sp, color = TextSecondary)
     }
 }
 
 private fun loadAppIcon(context: Context, packages: List<String>): Drawable? {
     for (pkg in packages) {
-        try {
-            return context.packageManager.getApplicationIcon(pkg)
-        } catch (_: PackageManager.NameNotFoundException) {
-        }
+        try { return context.packageManager.getApplicationIcon(pkg) }
+        catch (_: PackageManager.NameNotFoundException) {}
     }
     return null
 }
 
 @Composable
-private fun PackageCard(item: PackageRecord, onToggle: () -> Unit) {
+private fun PackageCard(item: PackageRecord, onToggle: () -> Unit, onDelete: () -> Unit) {
     val context = LocalContext.current
+    var showDeleteDialog by remember { mutableStateOf(false) }
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = CardDark),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
-        onClick = {
-            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-            cm.setPrimaryClip(android.content.ClipData.newPlainText("取件码", item.code))
-            Toast.makeText(context, "已复制 ${item.code}", Toast.LENGTH_SHORT).show()
-        }
     ) {
         Row(
-            modifier = Modifier.padding(20.dp),
+            modifier = Modifier
+                .padding(20.dp)
+                .pointerInput(item.id) {
+                    detectTapGestures(
+                        onTap = {
+                            val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                            cm.setPrimaryClip(android.content.ClipData.newPlainText("取件码", item.code))
+                            Toast.makeText(context, "已复制 ${item.code}", Toast.LENGTH_SHORT).show()
+                        },
+                        onLongPress = { showDeleteDialog = true }
+                    )
+                },
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(
-                    item.code,
-                    fontSize = 36.sp,
-                    fontWeight = FontWeight.Bold,
-                    color = CodeGreen
-                )
+                Text(item.code, fontSize = 36.sp, fontWeight = FontWeight.Bold, color = CodeGreen)
                 if (item.station.isNotBlank()) {
                     Spacer(Modifier.height(4.dp))
                     Text(item.station, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
@@ -433,19 +479,33 @@ private fun PackageCard(item: PackageRecord, onToggle: () -> Unit) {
                 Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (item.carrier.isNotBlank()) {
-                        Text(item.carrier, style = MaterialTheme.typography.bodySmall,
-                            color = TextSecondary)
+                        Text(item.carrier, style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                         Spacer(Modifier.width(8.dp))
                     }
-                    Text(formatTime(item.timestamp),
-                        style = MaterialTheme.typography.bodySmall,
-                        color = TextSecondary)
+                    Text(formatTime(item.timestamp), style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                 }
             }
             FilledTonalButton(onClick = onToggle, shape = RoundedCornerShape(14.dp)) {
                 Text(if (item.pickedUp) "撤销" else "已取")
             }
         }
+    }
+
+    if (showDeleteDialog) {
+        AlertDialog(
+            onDismissRequest = { showDeleteDialog = false },
+            containerColor = CardDark,
+            title = { Text("删除这条记录？", color = TextPrimary) },
+            text = { Text("取件码 ${item.code} 将被永久删除", color = TextSecondary) },
+            confirmButton = {
+                TextButton(onClick = { showDeleteDialog = false; onDelete() }) {
+                    Text("删除", color = Color(0xFFFF453A), fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { showDeleteDialog = false }) { Text("取消", color = TextSecondary) }
+            }
+        )
     }
 }
 
@@ -459,8 +519,7 @@ private fun EmptyHint(tab: Int) {
             Text(
                 if (tab == 0) "没有待取的快递\n收到取件短信后会自动出现"
                 else "没有已取记录",
-                style = MaterialTheme.typography.bodyLarge,
-                color = TextSecondary
+                style = MaterialTheme.typography.bodyLarge, color = TextSecondary
             )
         }
     }
