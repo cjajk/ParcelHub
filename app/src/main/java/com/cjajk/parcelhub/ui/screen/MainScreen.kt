@@ -38,7 +38,6 @@ import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.unit.roundToPx
 import androidx.compose.ui.unit.sp
 import androidx.core.graphics.drawable.toBitmap
 import com.cjajk.parcelhub.data.PackageRecord
@@ -61,7 +60,6 @@ val TextSecondary = Color(0xFF98989F)
 val CodeGreen = Color(0xFF30D158)
 val AccentBlue = Color(0xFF0A84FF)
 
-// 平台配置（id 用于排序持久化）
 data class Platform(
     val id: String,
     val packages: List<String>,
@@ -354,7 +352,6 @@ private fun GlassBottomBar() {
     val haptic = LocalHapticFeedback.current
     val allPlatforms = defaultPlatforms(context)
 
-    // 读取保存的顺序
     val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
     var order by remember {
         mutableStateOf(
