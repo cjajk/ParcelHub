@@ -33,6 +33,8 @@ data class ExpressResult(
             7 -> "转单"
             8 -> "清关中"
             14 -> "拒签"
+            501 -> "已到驿站"
+            1002 -> "干线运输"
             else -> "未知"
         }
 }
@@ -157,8 +159,8 @@ object ExpressQuery {
 
     private fun estimateDays(state: Int, dataArr: org.json.JSONArray): Int? = when (state) {
         3 -> 0
-        5 -> 1
-        1, 0 -> try {
+        5, 501 -> 0
+        1, 0, 1002 -> try {
             val fmt = java.text.SimpleDateFormat("yyyy-MM-dd HH:mm:ss", java.util.Locale.US)
             val first = dataArr.getJSONObject(dataArr.length() - 1).optString("time")
             val last = dataArr.getJSONObject(0).optString("time")
