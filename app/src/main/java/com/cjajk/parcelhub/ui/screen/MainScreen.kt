@@ -6,6 +6,7 @@ import android.content.IntentFilter
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
@@ -42,6 +43,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -378,7 +380,7 @@ private fun GlassBottomBar(onToggleVertical: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val allPlatforms = defaultPlatforms(context)
     val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
-    var order by remember {
+    val order = remember {
         mutableStateListOf<String>().apply {
             addAll(sp.getString(SP_ORDER, null)?.split(",")?.filter { id -> allPlatforms.any { it.id == id } }
                 ?: allPlatforms.map { it.id })
@@ -414,7 +416,8 @@ private fun GlassBottomBar(onToggleVertical: () -> Unit) {
                     dragOff += dx
                     val shift = (dragOff / itemWpx).toInt()
                     if (shift != 0 && index + shift in order.indices) {
-                        order = order.toMutableList().apply { val t = removeAt(index); add(index + shift, t) }
+                        val t = order.removeAt(index)
+                        order.add(index + shift, t)
                         sp.edit().putString(SP_ORDER, order.joinToString(",")).apply()
                         dragOff -= shift * itemWpx
                         dragIdx = index + shift
@@ -437,7 +440,7 @@ private fun VerticalBarStandalone(onToggleVertical: () -> Unit) {
     val haptic = LocalHapticFeedback.current
     val allPlatforms = defaultPlatforms(context)
     val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
-    var order by remember {
+    val order = remember {
         mutableStateListOf<String>().apply {
             addAll(sp.getString(SP_ORDER, null)?.split(",")?.filter { id -> allPlatforms.any { it.id == id } }
                 ?: allPlatforms.map { it.id })
@@ -473,7 +476,8 @@ private fun VerticalBarStandalone(onToggleVertical: () -> Unit) {
                     dragOff += dy
                     val shift = (dragOff / itemHpx).toInt()
                     if (shift != 0 && index + shift in order.indices) {
-                        order = order.toMutableList().apply { val t = removeAt(index); add(index + shift, t) }
+                        val t = order.removeAt(index)
+                        order.add(index + shift, t)
                         sp.edit().putString(SP_ORDER, order.joinToString(",")).apply()
                         dragOff -= shift * itemHpx
                         dragIdx = index + shift
