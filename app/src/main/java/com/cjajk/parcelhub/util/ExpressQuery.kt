@@ -1,6 +1,5 @@
 package com.cjajk.parcelhub.util
 
-import com.cjajk.parcelhub.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -82,6 +81,8 @@ fun guessComCode(nu: String): String? = when {
 
 object ExpressQuery {
     private const val URL = "https://poll.kuaidi100.com/poll/query.do"
+    private const val CUSTOMER = "626FD65B46E29ACE3C1DEAC8F7146C85"
+    private const val KEY = "nWwfDOnd3418"
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -102,10 +103,10 @@ object ExpressQuery {
                 if (!phoneTail.isNullOrBlank()) put("phone", phoneTail.trim())
             }.toString()
 
-            val sign = md5(param + BuildConfig.KD100_KEY + BuildConfig.KD100_CUSTOMER)
+            val sign = md5(param + KEY + CUSTOMER)
 
             val body = FormBody.Builder()
-                .add("customer", BuildConfig.KD100_CUSTOMER)
+                .add("customer", CUSTOMER)
                 .add("sign", sign)
                 .add("param", param)
                 .build()
