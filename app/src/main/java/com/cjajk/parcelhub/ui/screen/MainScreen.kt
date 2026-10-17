@@ -5,44 +5,33 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.widget.Toast
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
 import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
-import androidx.compose.animation.AnimatedContent
-import androidx.compose.animation.SizeTransform
-import androidx.compose.animation.core.Spring
-import androidx.compose.animation.core.animateDpAsState
-import androidx.compose.animation.core.spring
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInHorizontally
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutHorizontally
-import androidx.compose.animation.slideOutVertically
-import androidx.compose.animation.togetherWith
-import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
-import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
-import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingBag
 import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SwapVert
@@ -66,11 +55,11 @@ import androidx.compose.ui.unit.sp
 import com.cjajk.parcelhub.data.PackageRecord
 import com.cjajk.parcelhub.service.SmsReceiver
 import com.cjajk.parcelhub.ui.viewmodel.MainViewModel
+import com.cjajk.parcelhub.util.COM_LIST
 import com.cjajk.parcelhub.util.DeepLinks
 import com.cjajk.parcelhub.util.ExpressQuery
 import com.cjajk.parcelhub.util.ExpressQueryException
 import com.cjajk.parcelhub.util.ExpressResult
-import com.cjajk.parcelhub.util.COM_LIST
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import java.text.SimpleDateFormat
@@ -134,6 +123,13 @@ fun MainScreen(vm: MainViewModel) {
     val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
     var sideHeightPx by remember { mutableIntStateOf(sp.getInt(SP_SIDE_HEIGHT, 0)) }
 
+    val barAngle by animateFloatAsState(
+        targetValue = if (verticalBar) 90f else 0f,
+        animationSpec = tween(durationMillis = 340, easing = FastOutSlowInEasing),
+        label = "barAngle"
+    )
+    val angleSettled = barAngle <= 0.5f || barAngle >= 89.5f
+
     val bottomPad by animateDpAsState(
         targetValue = if (verticalBar) 0.dp else 84.dp,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
@@ -153,91 +149,95 @@ fun MainScreen(vm: MainViewModel) {
                     .padding(bottom = bottomPad, end = endPad)
                     .fillMaxSize()
             ) {
-            Row(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
-                verticalAlignment = Alignment.CenterVertically
-            ) {
-                Text(
-                    "快递聚合",
-                    style = MaterialTheme.typography.headlineMedium,
-                    fontWeight = FontWeight.Bold,
-                    color = TextPrimary,
-                    modifier = Modifier.weight(1f)
-                )
-                IconButton(onClick = { showAdd = true }) {
-                    Icon(Icons.Default.Add, contentDescription = "手动添加", tint = TextPrimary,
-                        modifier = Modifier.size(28.dp))
-                }
-                IconButton(onClick = { showSearch = true }) {
-                    Icon(Icons.Default.Search, contentDescription = "查询快递", tint = TextPrimary,
-                        modifier = Modifier.size(28.dp))
-                }
-            }
-
-            TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
-                val waiting = packages.count { !it.pickedUp }
-                val done = packages.count { it.pickedUp }
-                Tab(selected = tab == 0, onClick = { tab = 0 },
-                    text = { Text("待取 $waiting", fontWeight = FontWeight.Medium, color = TextPrimary) })
-                Tab(selected = tab == 1, onClick = { tab = 1 },
-                    text = { Text("已取 $done", fontWeight = FontWeight.Medium, color = TextSecondary) })
-            }
-
-            val list = packages.filter { if (tab == 0) !it.pickedUp else it.pickedUp }
-            LazyColumn(
-                contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 12.dp),
-                verticalArrangement = Arrangement.spacedBy(12.dp)
-            ) {
-                if (queryResult != null) {
-                    item(key = "express_query") {
-                        ExpressQueryCard(queryResult!!, onDismiss = { queryResult = null },
-                            onSave = {
-                                vm.addManual(queryResult!!.nu, "", queryResult!!.com)
-                                Toast.makeText(context, "已保存到列表", Toast.LENGTH_SHORT).show()
-                                queryResult = null
-                            })
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(start = 20.dp, end = 8.dp, top = 16.dp, bottom = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        "快递聚合",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = TextPrimary,
+                        modifier = Modifier.weight(1f)
+                    )
+                    IconButton(onClick = { showAdd = true }) {
+                        Icon(Icons.Default.Add, contentDescription = "手动添加", tint = TextPrimary,
+                            modifier = Modifier.size(28.dp))
+                    }
+                    IconButton(onClick = { showSearch = true }) {
+                        Icon(Icons.Default.Search, contentDescription = "查询快递", tint = TextPrimary,
+                            modifier = Modifier.size(28.dp))
                     }
                 }
-                if (list.isEmpty() && queryResult == null) {
-                    item { EmptyHint(tab) }
+
+                TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
+                    val waiting = packages.count { !it.pickedUp }
+                    val done = packages.count { it.pickedUp }
+                    Tab(selected = tab == 0, onClick = { tab = 0 },
+                        text = { Text("待取 $waiting", fontWeight = FontWeight.Medium, color = TextPrimary) })
+                    Tab(selected = tab == 1, onClick = { tab = 1 },
+                        text = { Text("已取 $done", fontWeight = FontWeight.Medium, color = TextSecondary) })
                 }
-                items(list, key = { it.id }) { item ->
-                    PackageCard(item, onToggle = { vm.togglePickedUp(item) },
-                        onDelete = { vm.delete(item) })
+
+                val list = packages.filter { if (tab == 0) !it.pickedUp else it.pickedUp }
+                LazyColumn(
+                    contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 12.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
+                ) {
+                    if (queryResult != null) {
+                        item(key = "express_query") {
+                            ExpressQueryCard(queryResult!!, onDismiss = { queryResult = null },
+                                onSave = {
+                                    vm.addManual(queryResult!!.nu, "", queryResult!!.com)
+                                    Toast.makeText(context, "已保存到列表", Toast.LENGTH_SHORT).show()
+                                    queryResult = null
+                                })
+                        }
+                    }
+                    if (list.isEmpty() && queryResult == null) {
+                        item { EmptyHint(tab) }
+                    }
+                    items(list, key = { it.id }) { item ->
+                        PackageCard(item, onToggle = { vm.togglePickedUp(item) },
+                            onDelete = { vm.delete(item) })
+                    }
                 }
             }
         }
+
+        if (!verticalBar || !angleSettled) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .graphicsLayer {
+                        rotationZ = barAngle
+                        alpha = (1f - barAngle / 90f).coerceIn(0f, 1f)
+                    }
+            ) {
+                GlassBottomBar(onToggleVertical = { verticalBar = true })
+            }
         }
 
-        AnimatedContent(
-            targetState = verticalBar,
-            transitionSpec = {
-                val enter = if (targetState) slideInHorizontally { it } + fadeIn()
-                            else slideInVertically { it } + fadeIn()
-                val exit = if (targetState) slideOutVertically { -it } + fadeOut()
-                           else slideOutHorizontally { -it } + fadeOut()
-                (enter togetherWith exit) using SizeTransform(clip = false) { _, _ ->
-                    spring(
-                        dampingRatio = Spring.DampingRatioMediumBouncy,
-                        stiffness = Spring.StiffnessLow
-                    )
-                }
-            },
-            modifier = Modifier.align(if (verticalBar) Alignment.CenterEnd else Alignment.BottomCenter)
-        ) { isVertical ->
-            if (isVertical) {
+        if (verticalBar || !angleSettled) {
+            Box(
+                modifier = Modifier
+                    .align(Alignment.CenterEnd)
+                    .graphicsLayer {
+                        rotationZ = barAngle - 90f
+                        alpha = (barAngle / 90f).coerceIn(0f, 1f)
+                    }
+            ) {
                 VerticalBarStandalone(
                     onToggleVertical = { verticalBar = false },
                     heightPx = sideHeightPx,
-                    onHeightChange = { px ->
+                    onHeightChange = { sideHeightPx = it },
+                    onHeightCommit = { px ->
                         sideHeightPx = px
                         sp.edit().putInt(SP_SIDE_HEIGHT, px).apply()
                     }
                 )
-            } else {
-                GlassBottomBar(onToggleVertical = { verticalBar = true })
             }
         }
     }
@@ -448,7 +448,7 @@ private fun GlassBottomBar(onToggleVertical: () -> Unit) {
     val itemWpx = with(density) { itemW.toPx() }
     var dragIdx by remember { mutableStateOf(-1) }
     var dragOff by remember { mutableFloatStateOf(0f) }
-    val animOff by animateFloatAsState(
+    val animOff = animateFloatAsState(
         targetValue = if (dragIdx >= 0) dragOff else 0f,
         animationSpec = spring(stiffness = 2000f, dampingRatio = Spring.DampingRatioNoBouncy),
         label = "d"
@@ -471,7 +471,7 @@ private fun GlassBottomBar(onToggleVertical: () -> Unit) {
                 platform = platform,
                 shaking = dragIdx >= 0 && dragIdx != index,
                 dragging = dragIdx == index,
-                animatedOffset = if (dragIdx == index) animOff else 0f,
+                offsetState = animOff,
                 onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); dragIdx = index; dragOff = 0f },
                 onDrag = { dx -> dragOff += dx },
                 onDragEnd = {
@@ -494,7 +494,8 @@ private fun GlassBottomBar(onToggleVertical: () -> Unit) {
             minPx = 0,
             maxPx = 0,
             onToggle = onToggleVertical,
-            onHeightChange = {}
+            onHeightChange = {},
+            onHeightCommit = {}
         )
     }
 }
@@ -503,7 +504,8 @@ private fun GlassBottomBar(onToggleVertical: () -> Unit) {
 private fun VerticalBarStandalone(
     onToggleVertical: () -> Unit,
     heightPx: Int,
-    onHeightChange: (Int) -> Unit
+    onHeightChange: (Int) -> Unit,
+    onHeightCommit: (Int) -> Unit
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -520,52 +522,62 @@ private fun VerticalBarStandalone(
     val itemHpx = with(density) { itemH.toPx() }
     var dragIdx by remember { mutableStateOf(-1) }
     var dragOff by remember { mutableFloatStateOf(0f) }
-    val animOff by animateFloatAsState(
+    val animOff = animateFloatAsState(
         targetValue = if (dragIdx >= 0) dragOff else 0f,
         animationSpec = spring(stiffness = 2000f, dampingRatio = Spring.DampingRatioNoBouncy),
         label = "d"
     )
 
-    BoxWithConstraints(modifier = Modifier) {
+    BoxWithConstraints {
         val maxPx = with(density) { maxHeight.roundToPx() }
-        val minPx = with(density) { 220.dp.roundToPx() }
-        val effectiveHeight = heightPx.takeIf { it in minPx..maxPx } ?: (maxPx / 2)
+        val minContentPx = with(density) {
+            (order.size * 44.dp + 36.dp + 20.dp).roundToPx()
+        }
+        val minPx = minOf(minContentPx, maxPx)
+        val effectiveHeight = heightPx.takeIf { it in minPx..maxPx }
+            ?: maxOf(maxPx / 2, minPx)
 
         Column(
             modifier = Modifier
                 .width(64.dp)
                 .height(with(density) { effectiveHeight.toDp() })
-                .padding(vertical = 12.dp, horizontal = 8.dp)
                 .clip(RoundedCornerShape(32.dp))
                 .background(BarDark.copy(alpha = 0.9f))
                 .border(1.dp, BorderGray, RoundedCornerShape(32.dp))
                 .padding(vertical = 10.dp, horizontal = 8.dp),
-            horizontalAlignment = Alignment.CenterHorizontally,
-            verticalArrangement = Arrangement.SpaceEvenly
+            horizontalAlignment = Alignment.CenterHorizontally
         ) {
-            order.forEachIndexed { index, id ->
-                val platform = allPlatforms.first { it.id == id }
-                ReorderableIcon(
-                    platform = platform,
-                    shaking = dragIdx >= 0 && dragIdx != index,
-                    dragging = dragIdx == index,
-                    animatedOffset = if (dragIdx == index) animOff else 0f,
-                    vertical = true,
-                    onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); dragIdx = index; dragOff = 0f },
-                    onDrag = { dy -> dragOff += dy },
-                    onDragEnd = {
-                        val shift = (dragOff / itemHpx).roundToInt()
-                        val target = (dragIdx + shift).coerceIn(0, order.lastIndex)
-                        if (target != dragIdx) {
-                            val t = order.removeAt(dragIdx)
-                            order.add(target, t)
-                            sp.edit().putString(SP_ORDER, order.joinToString(",")).apply()
-                        }
-                        dragIdx = -1
-                        dragOff = 0f
-                    },
-                    onClick = { platform.onClick(context) }
-                )
+            Box(modifier = Modifier.weight(1f)) {
+                Column(
+                    modifier = Modifier.fillMaxSize(),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.SpaceEvenly
+                ) {
+                    order.forEachIndexed { index, id ->
+                        val platform = allPlatforms.first { it.id == id }
+                        ReorderableIcon(
+                            platform = platform,
+                            shaking = dragIdx >= 0 && dragIdx != index,
+                            dragging = dragIdx == index,
+                            offsetState = animOff,
+                            vertical = true,
+                            onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); dragIdx = index; dragOff = 0f },
+                            onDrag = { dy -> dragOff += dy },
+                            onDragEnd = {
+                                val shift = (dragOff / itemHpx).roundToInt()
+                                val target = (dragIdx + shift).coerceIn(0, order.lastIndex)
+                                if (target != dragIdx) {
+                                    val t = order.removeAt(dragIdx)
+                                    order.add(target, t)
+                                    sp.edit().putString(SP_ORDER, order.joinToString(",")).apply()
+                                }
+                                dragIdx = -1
+                                dragOff = 0f
+                            },
+                            onClick = { platform.onClick(context) }
+                        )
+                    }
+                }
             }
             TransposeKey(
                 vertical = true,
@@ -573,7 +585,8 @@ private fun VerticalBarStandalone(
                 minPx = minPx,
                 maxPx = maxPx,
                 onToggle = onToggleVertical,
-                onHeightChange = onHeightChange
+                onHeightChange = onHeightChange,
+                onHeightCommit = onHeightCommit
             )
         }
     }
@@ -586,7 +599,8 @@ private fun TransposeKey(
     minPx: Int,
     maxPx: Int,
     onToggle: () -> Unit,
-    onHeightChange: (Int) -> Unit
+    onHeightChange: (Int) -> Unit,
+    onHeightCommit: (Int) -> Unit
 ) {
     var dragActive by remember { mutableStateOf(false) }
     var startHeight by remember { mutableIntStateOf(currentHeightPx) }
@@ -612,7 +626,10 @@ private fun TransposeKey(
                             val new = (startHeight + acc).roundToInt().coerceIn(minPx, maxPx)
                             onHeightChange(new)
                         },
-                        onDragEnd = { dragActive = false },
+                        onDragEnd = {
+                            dragActive = false
+                            onHeightCommit((startHeight + acc).roundToInt().coerceIn(minPx, maxPx))
+                        },
                         onDragCancel = { dragActive = false }
                     )
                 } else Modifier
@@ -637,7 +654,7 @@ private fun ReorderableIcon(
     platform: Platform,
     shaking: Boolean,
     dragging: Boolean,
-    animatedOffset: Float,
+    offsetState: State<Float>,
     modifier: Modifier = Modifier,
     vertical: Boolean = false,
     onLongPress: () -> Unit,
@@ -646,18 +663,21 @@ private fun ReorderableIcon(
     onClick: () -> Unit
 ) {
     val haptic = LocalHapticFeedback.current
-    val infinite = rememberInfiniteTransition(label = "shake")
-    val shakeRot by infinite.animateFloat(
-        initialValue = -3f, targetValue = 3f,
-        animationSpec = infiniteRepeatable(tween(80), RepeatMode.Reverse),
-        label = "rot"
-    )
-    val iconScale by animateFloatAsState(
+    val shakeRotState = if (shaking) {
+        rememberInfiniteTransition(label = "shake").animateFloat(
+            initialValue = -3f, targetValue = 3f,
+            animationSpec = infiniteRepeatable(tween(80), RepeatMode.Reverse),
+            label = "rot"
+        )
+    } else {
+        remember { mutableFloatStateOf(0f) }
+    }
+    val iconScale = animateFloatAsState(
         targetValue = if (dragging) 1.2f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
         label = "scale"
     )
-    val iconAlpha by animateFloatAsState(
+    val iconAlpha = animateFloatAsState(
         targetValue = if (dragging) 0.92f else 1f,
         animationSpec = spring(stiffness = Spring.StiffnessMedium),
         label = "alpha"
@@ -679,12 +699,13 @@ private fun ReorderableIcon(
             }
             .clickable { onClick() }
             .graphicsLayer {
-                translationX = if (vertical) 0f else animatedOffset
-                translationY = if (vertical) animatedOffset else 0f
-                rotationZ = if (shaking) shakeRot else 0f
-                scaleX = iconScale
-                scaleY = iconScale
-                alpha = iconAlpha
+                val off = if (dragging) offsetState.value else 0f
+                translationX = if (vertical) 0f else off
+                translationY = if (vertical) off else 0f
+                rotationZ = if (shaking) shakeRotState.value else 0f
+                scaleX = iconScale.value
+                scaleY = iconScale.value
+                alpha = iconAlpha.value
                 shadowElevation = if (dragging) 14f else 0f
             }
     ) {
@@ -774,7 +795,8 @@ private fun EmptyHint(tab: Int) {
             Text(
                 if (tab == 0) "没有待取的快递\n收到取件短信后会自动出现"
                 else "没有已取记录",
-                style = MaterialTheme.typography.bodyLarge, color = TextSecondary
+                style = MaterialTheme.typography.bodyLarge,
+                color = TextSecondary
             )
         }
     }
