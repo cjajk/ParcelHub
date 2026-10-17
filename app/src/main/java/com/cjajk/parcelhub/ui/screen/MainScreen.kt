@@ -3,8 +3,11 @@ package com.cjajk.parcelhub.ui.screen
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
+import android.content.pm.PackageManager
+import android.graphics.drawable.Drawable
 import android.os.Build
 import android.widget.Toast
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -22,10 +25,13 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.graphics.drawable.toBitmap
 import com.cjajk.parcelhub.data.PackageRecord
 import com.cjajk.parcelhub.service.SmsReceiver
 import com.cjajk.parcelhub.ui.viewmodel.MainViewModel
@@ -325,38 +331,74 @@ private fun GlassBottomBar() {
             horizontalArrangement = Arrangement.SpaceEvenly,
             verticalAlignment = Alignment.CenterVertically
         ) {
-            PlatformBtn("淘", "淘宝", Color(0xFFFF6A00)) { DeepLinks.openTaobaoIdentity(context) }
-            PlatformBtn("拼", "拼多多", Color(0xFFE2231A)) { DeepLinks.openPddPickup(context) }
-            PlatformBtn("菜", "菜鸟", Color(0xFF1E88E5)) { DeepLinks.openAlipayCainiao(context) }
-            PlatformBtn("顺", "顺丰", Color(0xFF8E8E93)) { DeepLinks.openSf(context) }
-            PlatformBtn("JD", "京东", Color(0xFFE1251B)) { DeepLinks.openJd(context) }
+            PlatformBtn(packages = listOf("com.taobao.taobao"), label = "淘宝", fallbackIcon = "淘", fallbackBg = Color(0xFFFF6A00)) { DeepLinks.openTaobaoIdentity(context) }
+            PlatformBtn(packages = listOf("com.xunmeng.pinduoduo"), label = "拼多多", fallbackIcon = "拼", fallbackBg = Color(0xFFE2231A)) { DeepLinks.openPddPickup(context) }
+            PlatformBtn(packages = listOf("com.eg.android.AlipayGphone"), label = "菜鸟", fallbackIcon = "菜", fallbackBg = Color(0xFF1E88E5)) { DeepLinks.openAlipayCainiao(context) }
+            PlatformBtn(packages = listOf("com.sf.activity", "com.sfexpress.activity"), label = "顺丰", fallbackIcon = "顺", fallbackBg = Color(0xFF8E8E93)) { DeepLinks.openSf(context) }
+            PlatformBtn(packages = listOf("com.jingdong.app.mall"), label = "京东", fallbackIcon = "JD", fallbackBg = Color(0xFFE1251B)) { DeepLinks.openJd(context) }
         }
     }
 }
 
 @Composable
-private fun PlatformBtn(icon: String, label: String, bg: Color, onClick: () -> Unit) {
+private fun PlatformBtn(
+    packages: List<String>,
+    label: String,
+    fallbackIcon: String,
+    fallbackBg: Color,
+    onClick: () -> Unit
+) {
+    val context = LocalContext.current
+    val density = LocalDensity.current
+    val iconSizePx = with(density) { 44.dp.roundToPx() }
+    val appIcon: Drawable? = remember(packages) { loadAppIcon(context, packages) }
+    val iconBitmap = remember(appIcon, iconSizePx) {
+        appIcon?.let { runCatching { it.toBitmap(iconSizePx, iconSizePx) }.getOrNull() }
+    }
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
         modifier = Modifier.clickable(onClick = onClick)
     ) {
         Box(
-            modifier = Modifier
-                .size(44.dp)
-                .clip(CircleShape)
-                .background(bg),
+            modifier = Modifier.size(44.dp),
             contentAlignment = Alignment.Center
         ) {
-            Text(
-                icon,
-                color = Color.White,
-                fontWeight = FontWeight.Bold,
-                fontSize = if (icon.length > 1) 13.sp else 16.sp
-            )
+            if (iconBitmap != null) {
+                Image(
+                    bitmap = iconBitmap.asImageBitmap(),
+                    contentDescription = label,
+                    modifier = Modifier.size(44.dp)
+                )
+            } else {
+                Box(
+                    modifier = Modifier
+                        .size(44.dp)
+                        .clip(CircleShape)
+                        .background(fallbackBg),
+                    contentAlignment = Alignment.Center
+                ) {
+                    Text(
+                        fallbackIcon,
+                        color = Color.White,
+                        fontWeight = FontWeight.Bold,
+                        fontSize = if (fallbackIcon.length > 1) 13.sp else 16.sp
+                    )
+                }
+            }
         }
         Spacer(Modifier.height(6.dp))
         Text(label, fontSize = 11.sp, color = TextSecondary)
     }
+}
+
+private fun loadAppIcon(context: Context, packages: List<String>): Drawable? {
+    for (pkg in packages) {
+        try {
+            return context.packageManager.getApplicationIcon(pkg)
+        } catch (_: PackageManager.NameNotFoundException) {
+        }
+    }
+    return null
 }
 
 @Composable
