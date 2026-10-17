@@ -531,7 +531,7 @@ private fun VerticalBarStandalone(
     BoxWithConstraints {
         val maxPx = with(density) { maxHeight.roundToPx() }
         val minContentPx = with(density) {
-            (order.size * 44.dp + 36.dp + 20.dp).roundToPx()
+            ((order.size * 44).dp + 36.dp + 20.dp).roundToPx()
         }
         val minPx = minOf(minContentPx, maxPx)
         val effectiveHeight = heightPx.takeIf { it in minPx..maxPx }
