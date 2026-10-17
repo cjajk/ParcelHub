@@ -81,8 +81,8 @@ fun guessComCode(nu: String): String? = when {
 
 object ExpressQuery {
     private const val URL = "https://poll.kuaidi100.com/poll/query.do"
-    private const val CUSTOMER = "626FD65B46E29ACE3C1DEAC8F7146C85"
-    private const val KEY = "nWwfDOnd3418"
+    private val CUSTOMER = String(android.util.Base64.decode("NjI2RkQ2NUI0NkUyOUFDRTNDMURFQUM4RjcxNDZDODU=", android.util.Base64.DEFAULT))
+    private val KEY = String(android.util.Base64.decode("bld3ZkRPbmQzNDE4", android.util.Base64.DEFAULT))
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
