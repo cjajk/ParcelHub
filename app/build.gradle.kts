@@ -50,4 +50,5 @@ dependencies {
     implementation(libs.androidx.material.icons.extended)
     implementation(libs.androidx.datastore.preferences)
     debugImplementation(libs.androidx.ui.tooling)
+    implementation("com.squareup.okhttp3:okhttp:4.12.0")
 }

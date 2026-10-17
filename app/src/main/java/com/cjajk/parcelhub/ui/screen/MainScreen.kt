@@ -15,6 +15,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
@@ -29,6 +30,9 @@ import com.cjajk.parcelhub.data.PackageRecord
 import com.cjajk.parcelhub.service.SmsReceiver
 import com.cjajk.parcelhub.ui.viewmodel.MainViewModel
 import com.cjajk.parcelhub.util.DeepLinks
+import com.cjajk.parcelhub.util.ExpressQuery
+import com.cjajk.parcelhub.util.ExpressResult
+import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -39,6 +43,7 @@ val BorderGray = Color(0xFF2C2C2E)
 val TextPrimary = Color(0xFFF2F2F7)
 val TextSecondary = Color(0xFF98989F)
 val CodeGreen = Color(0xFF30D158)
+val AccentBlue = Color(0xFF0A84FF)
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -46,6 +51,10 @@ fun MainScreen(vm: MainViewModel) {
     val context = LocalContext.current
     val packages by vm.packages.collectAsState()
     var tab by remember { mutableIntStateOf(0) }
+    var showSearch by remember { mutableStateOf(false) }
+    var queryResult by remember { mutableStateOf<ExpressResult?>(null) }
+    var queryLoading by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
 
     DisposableEffect(Unit) {
         val filter = IntentFilter(SmsReceiver.ACTION_PACKAGE_ARRIVED)
@@ -66,13 +75,25 @@ fun MainScreen(vm: MainViewModel) {
         bottomBar = { GlassBottomBar() }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
-            Text(
-                "快递聚合",
-                style = MaterialTheme.typography.headlineMedium,
-                fontWeight = FontWeight.Bold,
-                color = TextPrimary,
-                modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp)
-            )
+            Row(
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .padding(start = 20.dp, end = 12.dp, top = 16.dp, bottom = 8.dp),
+                verticalAlignment = Alignment.CenterVertically
+            ) {
+                Text(
+                    "快递聚合",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                IconButton(onClick = { showSearch = true }) {
+                    Icon(Icons.Default.Search, contentDescription = "查询快递",
+                        tint = TextPrimary, modifier = Modifier.size(28.dp))
+                }
+            }
+
             TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
                 val waiting = packages.count { !it.pickedUp }
                 val done = packages.count { it.pickedUp }
@@ -81,19 +102,165 @@ fun MainScreen(vm: MainViewModel) {
                 Tab(selected = tab == 1, onClick = { tab = 1 },
                     text = { Text("已取 $done", fontWeight = FontWeight.Medium, color = TextSecondary) })
             }
+
             val list = packages.filter { if (tab == 0) !it.pickedUp else it.pickedUp }
-            if (list.isEmpty()) {
-                EmptyHint(tab)
-            } else {
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 120.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    items(list, key = { it.id }) { item ->
-                        PackageCard(item, onToggle = { vm.togglePickedUp(item) })
+            LazyColumn(
+                contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 120.dp),
+                verticalArrangement = Arrangement.spacedBy(12.dp)
+            ) {
+                if (queryResult != null) {
+                    item(key = "express_query") {
+                        ExpressQueryCard(queryResult!!, onDismiss = { queryResult = null })
+                    }
+                }
+                if (list.isEmpty() && queryResult == null) {
+                    item { EmptyHint(tab) }
+                }
+                items(list, key = { it.id }) { item ->
+                    PackageCard(item, onToggle = { vm.togglePickedUp(item) })
+                }
+            }
+        }
+    }
+
+    if (showSearch) {
+        SearchDialog(
+            loading = queryLoading,
+            onDismiss = { showSearch = false },
+            onQuery = { nu ->
+                showSearch = false
+                queryLoading = true
+                queryResult = null
+                scope.launch {
+                    val result = ExpressQuery.query(nu)
+                    queryLoading = false
+                    queryResult = result
+                    if (result == null) {
+                        Toast.makeText(context, "查询失败，请检查单号或稍后再试", Toast.LENGTH_SHORT).show()
                     }
                 }
             }
+        )
+    }
+}
+
+@Composable
+private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (String) -> Unit) {
+    var text by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardDark,
+        title = { Text("查询快递", color = TextPrimary, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    label = { Text("输入快递单号") },
+                    singleLine = true,
+                    shape = RoundedCornerShape(12.dp),
+                    colors = OutlinedTextFieldDefaults.colors(
+                        focusedTextColor = TextPrimary,
+                        unfocusedTextColor = TextPrimary,
+                        focusedBorderColor = AccentBlue,
+                        unfocusedBorderColor = BorderGray,
+                        focusedLabelColor = AccentBlue,
+                        unfocusedLabelColor = TextSecondary,
+                        cursorColor = AccentBlue
+                    )
+                )
+                if (loading) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("查询中...", color = TextSecondary, fontSize = 13.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (text.isNotBlank()) onQuery(text.trim()) },
+                enabled = text.isNotBlank() && !loading
+            ) { Text("查询", color = AccentBlue, fontWeight = FontWeight.Bold) }
+        },
+        dismissButton = {
+            TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
+        }
+    )
+}
+
+@Composable
+private fun ExpressQueryCard(result: ExpressResult, onDismiss: () -> Unit) {
+    Card(
+        modifier = Modifier.fillMaxWidth(),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = CardDark),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Column(modifier = Modifier.padding(20.dp)) {
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(
+                    result.com,
+                    fontSize = 18.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = TextPrimary,
+                    modifier = Modifier.weight(1f)
+                )
+                Box(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(
+                            when (result.state) {
+                                3 -> Color(0xFF30D158).copy(alpha = 0.15f)
+                                5 -> Color(0xFFFF9F0A).copy(alpha = 0.15f)
+                                else -> Color(0xFF0A84FF).copy(alpha = 0.15f)
+                            }
+                        )
+                        .padding(horizontal = 10.dp, vertical = 4.dp)
+                ) {
+                    Text(
+                        result.stateText,
+                        fontSize = 12.sp,
+                        fontWeight = FontWeight.Medium,
+                        color = when (result.state) {
+                            3 -> CodeGreen
+                            5 -> Color(0xFFFF9F0A)
+                            else -> AccentBlue
+                        }
+                    )
+                }
+            }
+            Spacer(Modifier.height(8.dp))
+            Text(result.nu, fontSize = 13.sp, color = TextSecondary)
+            Spacer(Modifier.height(12.dp))
+            Text(result.latestContext, fontSize = 15.sp, color = TextPrimary)
+            Spacer(Modifier.height(4.dp))
+            Text(result.latestTime, fontSize = 12.sp, color = TextSecondary)
+
+            if (result.estimatedDays != null && result.state != 3) {
+                Spacer(Modifier.height(12.dp))
+                Row(
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(10.dp))
+                        .background(AccentBlue.copy(alpha = 0.12f))
+                        .padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically
+                ) {
+                    Text(
+                        if (result.estimatedDays <= 0) "预计今天送达"
+                        else if (result.estimatedDays == 1) "预计明天送达"
+                        else "预计 ${result.estimatedDays} 天后送达",
+                        fontSize = 14.sp,
+                        color = AccentBlue,
+                        fontWeight = FontWeight.Medium
+                    )
+                }
+            }
+
+            Spacer(Modifier.height(8.dp))
+            TextButton(onClick = onDismiss) { Text("关闭", color = TextSecondary, fontSize = 13.sp) }
         }
     }
 }
@@ -200,7 +367,7 @@ private fun PackageCard(item: PackageRecord, onToggle: () -> Unit) {
 
 @Composable
 private fun EmptyHint(tab: Int) {
-    Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+    Box(modifier = Modifier.fillMaxWidth().padding(top = 80.dp), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Default.Inbox, contentDescription = null,
                 modifier = Modifier.size(64.dp), tint = Color(0xFF48484A))
