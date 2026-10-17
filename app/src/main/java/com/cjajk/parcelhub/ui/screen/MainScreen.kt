@@ -48,8 +48,6 @@ import com.cjajk.parcelhub.util.DeepLinks
 import com.cjajk.parcelhub.util.ExpressQuery
 import com.cjajk.parcelhub.util.ExpressResult
 import com.cjajk.parcelhub.util.COM_LIST
-import dev.chrisbanes.haze.HazeState
-import dev.chrisbanes.haze.hazeChild
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -63,6 +61,7 @@ val TextSecondary = Color(0xFF98989F)
 val CodeGreen = Color(0xFF30D158)
 val AccentBlue = Color(0xFF0A84FF)
 
+// 平台配置（id 用于排序持久化）
 data class Platform(
     val id: String,
     val packages: List<String>,
@@ -93,7 +92,6 @@ fun MainScreen(vm: MainViewModel) {
     var queryResult by remember { mutableStateOf<ExpressResult?>(null) }
     var queryLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
-    val hazeState = remember { HazeState() }
 
     DisposableEffect(Unit) {
         val filter = IntentFilter(SmsReceiver.ACTION_PACKAGE_ARRIVED)
@@ -111,7 +109,7 @@ fun MainScreen(vm: MainViewModel) {
 
     Scaffold(
         containerColor = BgBlack,
-        bottomBar = { GlassBottomBar(hazeState) }
+        bottomBar = { GlassBottomBar() }
     ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
             Row(
@@ -218,15 +216,18 @@ private fun AddManualDialog(onDismiss: () -> Unit, onAdd: (String, String, Strin
             Column {
                 OutlinedTextField(value = code, onValueChange = { code = it },
                     label = { Text("取件码（如 3-2-501）") }, singleLine = true,
-                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
+                    shape = RoundedCornerShape(12.dp),
+                    colors = darkFieldColors())
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = station, onValueChange = { station = it },
                     label = { Text("取件地址（驿站/柜机名）") }, singleLine = true,
-                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
+                    shape = RoundedCornerShape(12.dp),
+                    colors = darkFieldColors())
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(value = carrier, onValueChange = { carrier = it },
                     label = { Text("快递公司（可选）") }, singleLine = true,
-                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
+                    shape = RoundedCornerShape(12.dp),
+                    colors = darkFieldColors())
             }
         },
         confirmButton = {
@@ -348,11 +349,12 @@ private fun ExpressQueryCard(result: ExpressResult, onDismiss: () -> Unit, onSav
 }
 
 @Composable
-private fun GlassBottomBar(hazeState: HazeState) {
+private fun GlassBottomBar() {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val allPlatforms = defaultPlatforms(context)
 
+    // 读取保存的顺序
     val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
     var order by remember {
         mutableStateOf(
@@ -371,8 +373,7 @@ private fun GlassBottomBar(hazeState: HazeState) {
             modifier = Modifier
                 .fillMaxWidth()
                 .clip(RoundedCornerShape(32.dp))
-                .background(BarDark.copy(alpha = 0.85f))
-                .hazeChild(hazeState)
+                .background(BarDark.copy(alpha = 0.9f))
                 .border(1.dp, BorderGray, RoundedCornerShape(32.dp))
                 .padding(vertical = 14.dp, horizontal = 12.dp),
             horizontalArrangement = Arrangement.SpaceEvenly,
@@ -380,14 +381,25 @@ private fun GlassBottomBar(hazeState: HazeState) {
         ) {
             orderedPlatforms.forEach { platform ->
                 DraggablePlatformBtn(platform = platform,
-                    onDragStart = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) })
+                    onDragStart = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
+                    onSwap = { from, to ->
+                        order = order.toMutableList().apply {
+                            val t = removeAt(from)
+                            add(to, t)
+                        }
+                        sp.edit().putString(SP_ORDER, order.joinToString(",")).apply()
+                    })
             }
         }
     }
 }
 
 @Composable
-private fun DraggablePlatformBtn(platform: Platform, onDragStart: () -> Unit) {
+private fun DraggablePlatformBtn(
+    platform: Platform,
+    onDragStart: () -> Unit,
+    onSwap: (Int, Int) -> Unit
+) {
     val context = LocalContext.current
     val density = LocalDensity.current
     val iconSizePx = with(density) { 44.dp.roundToPx() }
