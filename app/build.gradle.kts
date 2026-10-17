@@ -1,3 +1,5 @@
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.android)
@@ -15,7 +17,7 @@ android {
         versionCode = 1
         versionName = "0.1.0"
 
-        val props = java.util.Properties().apply {
+        val props = Properties().apply {
             runCatching { load(rootProject.file("local.properties").inputStream()) }
         }
         val customer = props.getProperty("KD100_CUSTOMER") ?: System.getenv("KD100_CUSTOMER") ?: ""
