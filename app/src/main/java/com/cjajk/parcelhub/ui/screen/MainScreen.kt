@@ -98,7 +98,7 @@ private fun TopBar(vm: MainViewModel) {
                 QuickBtn("菜鸟", Icons.Default.LocalShipping, Modifier.weight(1f)) {
                     DeepLinks.openAlipayCainiao(context)
                 }
-                QuickBtn("顺丰", Icons.Default.LocalPostOffice, Modifier.weight(1f)) {
+                QuickBtn("顺丰", Icons.Default.MailOutline, Modifier.weight(1f)) {
                     DeepLinks.openSf(context)
                 }
                 QuickBtn("京东", Icons.Default.ShoppingBag, Modifier.weight(1f)) {
