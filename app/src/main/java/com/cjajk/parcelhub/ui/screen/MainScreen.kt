@@ -32,6 +32,7 @@ import com.cjajk.parcelhub.ui.viewmodel.MainViewModel
 import com.cjajk.parcelhub.util.DeepLinks
 import com.cjajk.parcelhub.util.ExpressQuery
 import com.cjajk.parcelhub.util.ExpressResult
+import com.cjajk.parcelhub.util.COM_LIST
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.*
@@ -127,16 +128,16 @@ fun MainScreen(vm: MainViewModel) {
         SearchDialog(
             loading = queryLoading,
             onDismiss = { showSearch = false },
-            onQuery = { nu ->
+            onQuery = { nu, com ->
                 showSearch = false
                 queryLoading = true
                 queryResult = null
                 scope.launch {
-                    val result = ExpressQuery.query(nu)
+                    val result = ExpressQuery.query(nu, com)
                     queryLoading = false
                     queryResult = result
                     if (result == null) {
-                        Toast.makeText(context, "查询失败，请检查单号或稍后再试", Toast.LENGTH_SHORT).show()
+                        Toast.makeText(context, "查询失败，请检查单号或手动选择快递公司", Toast.LENGTH_LONG).show()
                     }
                 }
             }
@@ -144,9 +145,12 @@ fun MainScreen(vm: MainViewModel) {
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (String) -> Unit) {
+private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (String, String?) -> Unit) {
     var text by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+    var selectedCom by remember { mutableStateOf<Pair<String, String>?>(null) }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = CardDark,
@@ -169,6 +173,44 @@ private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (Stri
                         cursorColor = AccentBlue
                     )
                 )
+                Spacer(Modifier.height(12.dp))
+                ExposedDropdownMenuBox(
+                    expanded = expanded,
+                    onExpandedChange = { expanded = it }
+                ) {
+                    OutlinedTextField(
+                        value = selectedCom?.second ?: "自动识别（可选）",
+                        onValueChange = {},
+                        readOnly = true,
+                        label = { Text("快递公司") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier.menuAnchor(ExposedDropdownMenuDefaults.MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                        colors = OutlinedTextFieldDefaults.colors(
+                            focusedTextColor = TextPrimary,
+                            unfocusedTextColor = TextSecondary,
+                            focusedBorderColor = AccentBlue,
+                            unfocusedBorderColor = BorderGray,
+                            focusedLabelColor = AccentBlue,
+                            unfocusedLabelColor = TextSecondary
+                        )
+                    )
+                    ExposedDropdownMenu(
+                        expanded = expanded,
+                        onDismissRequest = { expanded = false },
+                        containerColor = CardDark
+                    ) {
+                        COM_LIST.forEach { item ->
+                            DropdownMenuItem(
+                                text = { Text(item.second, color = TextPrimary) },
+                                onClick = {
+                                    selectedCom = item
+                                    expanded = false
+                                }
+                            )
+                        }
+                    }
+                }
                 if (loading) {
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -181,7 +223,7 @@ private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (Stri
         },
         confirmButton = {
             TextButton(
-                onClick = { if (text.isNotBlank()) onQuery(text.trim()) },
+                onClick = { if (text.isNotBlank()) onQuery(text.trim(), selectedCom?.first) },
                 enabled = text.isNotBlank() && !loading
             ) { Text("查询", color = AccentBlue, fontWeight = FontWeight.Bold) }
         },
