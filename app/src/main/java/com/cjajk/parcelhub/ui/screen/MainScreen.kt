@@ -181,6 +181,7 @@ fun MainScreen(vm: MainViewModel) {
             }
         }
     }
+    }
 
     if (showSearch) {
         SearchDialog(
