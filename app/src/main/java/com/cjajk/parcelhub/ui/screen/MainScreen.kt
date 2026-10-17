@@ -22,6 +22,7 @@ import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.animateItem
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -201,7 +202,8 @@ fun MainScreen(vm: MainViewModel) {
                     }
                     items(list, key = { it.id }) { item ->
                         PackageCard(item, onToggle = { vm.togglePickedUp(item) },
-                            onDelete = { vm.delete(item) })
+                            onDelete = { vm.delete(item) },
+                            modifier = Modifier.animateItem())
                     }
                 }
             }
@@ -635,8 +637,8 @@ private fun TransposeKey(
                 } else Modifier
             )
             .graphicsLayer {
-                scaleX = if (dragActive) 1.18f else 1f
-                scaleY = if (dragActive) 1.18f else 1f
+                scaleX = 1f
+                scaleY = 1f
             },
         contentAlignment = Alignment.Center
     ) {
@@ -721,11 +723,11 @@ private fun ReorderableIcon(
 }
 
 @Composable
-private fun PackageCard(item: PackageRecord, onToggle: () -> Unit, onDelete: () -> Unit) {
+private fun PackageCard(item: PackageRecord, onToggle: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
     val context = LocalContext.current
     var showDeleteDialog by remember { mutableStateOf(false) }
     Card(
-        modifier = Modifier.fillMaxWidth(),
+        modifier = modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
         colors = CardDefaults.cardColors(containerColor = CardDark),
         elevation = CardDefaults.cardElevation(defaultElevation = 0.dp),
@@ -746,8 +748,10 @@ private fun PackageCard(item: PackageRecord, onToggle: () -> Unit, onDelete: () 
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(item.code, fontSize = 32.sp, fontWeight = FontWeight.Bold, color = CodeGreen,
-                    lineHeight = 40.sp)
+                Text(item.code, fontSize = 32.sp, fontWeight = FontWeight.Bold,
+                    color = if (item.pickedUp) TextSecondary else CodeGreen,
+                    lineHeight = 40.sp,
+                    textDecoration = if (item.pickedUp) androidx.compose.ui.text.style.TextDecoration.LineThrough else null)
                 if (item.station.isNotBlank()) {
                     Spacer(Modifier.height(4.dp))
                     Text(item.station, style = MaterialTheme.typography.bodyMedium, color = TextPrimary)
