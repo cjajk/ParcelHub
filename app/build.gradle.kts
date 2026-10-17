@@ -51,4 +51,5 @@ dependencies {
     implementation(libs.androidx.datastore.preferences)
     debugImplementation(libs.androidx.ui.tooling)
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("dev.chrisbanes.haze:haze:0.9.1")
 }

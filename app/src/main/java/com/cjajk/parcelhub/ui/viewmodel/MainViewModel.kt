@@ -37,13 +37,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         refresh()
     }
 
-    fun addFake() {
+    fun addManual(code: String, station: String, carrier: String) {
         store.add(
             PackageRecord(
-                code = "3-2-501",
-                station = "菜鸟驿站·XX路店",
-                carrier = "中通快递",
-                rawSms = "测试数据"
+                code = code,
+                station = station,
+                carrier = carrier,
+                rawSms = "手动添加"
             )
         )
         refresh()
