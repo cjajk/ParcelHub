@@ -14,6 +14,14 @@ android {
         targetSdk = 35
         versionCode = 1
         versionName = "0.1.0"
+
+        val props = java.util.Properties().apply {
+            runCatching { load(rootProject.file("local.properties").inputStream()) }
+        }
+        val customer = props.getProperty("KD100_CUSTOMER") ?: System.getenv("KD100_CUSTOMER") ?: ""
+        val key = props.getProperty("KD100_KEY") ?: System.getenv("KD100_KEY") ?: ""
+        buildConfigField("String", "KD100_CUSTOMER", "\"$customer\"")
+        buildConfigField("String", "KD100_KEY", "\"$key\"")
     }
 
     buildTypes {
@@ -34,6 +42,7 @@ android {
     }
     buildFeatures {
         compose = true
+        buildConfig = true
     }
 }
 
