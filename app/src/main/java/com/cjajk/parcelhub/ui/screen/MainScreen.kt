@@ -45,6 +45,7 @@ import com.cjajk.parcelhub.service.SmsReceiver
 import com.cjajk.parcelhub.ui.viewmodel.MainViewModel
 import com.cjajk.parcelhub.util.DeepLinks
 import com.cjajk.parcelhub.util.ExpressQuery
+import com.cjajk.parcelhub.util.ExpressQueryException
 import com.cjajk.parcelhub.util.ExpressResult
 import com.cjajk.parcelhub.util.COM_LIST
 import kotlinx.coroutines.launch
@@ -151,7 +152,7 @@ fun MainScreen(vm: MainViewModel) {
                     item(key = "express_query") {
                         ExpressQueryCard(queryResult!!, onDismiss = { queryResult = null },
                             onSave = {
-                                vm.addManual(queryResult!!.nu, queryResult!!.com, "")
+                                vm.addManual(queryResult!!.nu, "", queryResult!!.com)
                                 Toast.makeText(context, "已保存到列表", Toast.LENGTH_SHORT).show()
                                 queryResult = null
                             })
@@ -172,17 +173,18 @@ fun MainScreen(vm: MainViewModel) {
         SearchDialog(
             loading = queryLoading,
             onDismiss = { showSearch = false },
-            onQuery = { nu, com ->
+            onQuery = { nu, com, phone ->
                 showSearch = false
                 queryLoading = true
                 queryResult = null
                 scope.launch {
-                    val result = ExpressQuery.query(nu, com)
-                    queryLoading = false
-                    queryResult = result
-                    if (result == null) {
-                        Toast.makeText(context, "查询失败，请检查单号或手动选择快递公司", Toast.LENGTH_LONG).show()
+                    try {
+                        val result = ExpressQuery.query(nu, com, phone.ifBlank { null })
+                        queryResult = result
+                    } catch (e: ExpressQueryException) {
+                        Toast.makeText(context, e.message, Toast.LENGTH_LONG).show()
                     }
+                    queryLoading = false
                 }
             }
         )
@@ -240,10 +242,11 @@ private fun AddManualDialog(onDismiss: () -> Unit, onAdd: (String, String, Strin
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (String, String?) -> Unit) {
+private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (String, String?, String) -> Unit) {
     var text by remember { mutableStateOf("") }
     var expanded by remember { mutableStateOf(false) }
     var selectedCom by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var phone by remember { mutableStateOf("") }
     AlertDialog(
         onDismissRequest = onDismiss,
         containerColor = CardDark,
@@ -270,6 +273,10 @@ private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (Stri
                         }
                     }
                 }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = phone, onValueChange = { if (it.length <= 4) phone = it },
+                    label = { Text("手机后4位（顺丰/京东必填）") }, singleLine = true,
+                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
                 if (loading) {
                     Spacer(Modifier.height(12.dp))
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -281,7 +288,7 @@ private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (Stri
             }
         },
         confirmButton = {
-            TextButton(onClick = { if (text.isNotBlank()) onQuery(text.trim(), selectedCom?.first) },
+            TextButton(onClick = { if (text.isNotBlank()) onQuery(text.trim(), selectedCom?.first, phone) },
                 enabled = text.isNotBlank() && !loading) {
                 Text("查询", color = AccentBlue, fontWeight = FontWeight.Bold)
             }
@@ -323,9 +330,14 @@ private fun ExpressQueryCard(result: ExpressResult, onDismiss: () -> Unit, onSav
             Spacer(Modifier.height(8.dp))
             Text(result.nu, fontSize = 13.sp, color = TextSecondary)
             Spacer(Modifier.height(12.dp))
-            Text(result.latestContext, fontSize = 15.sp, color = TextPrimary)
-            Spacer(Modifier.height(4.dp))
-            Text(result.latestTime, fontSize = 12.sp, color = TextSecondary)
+            result.traces.take(5).forEachIndexed { i, trace ->
+                Column {
+                    Text(trace.context, fontSize = 14.sp,
+                        color = if (i == 0) TextPrimary else TextSecondary)
+                    Text(trace.time, fontSize = 11.sp, color = TextSecondary)
+                    if (i < result.traces.take(5).size - 1) Spacer(Modifier.height(8.dp))
+                }
+            }
             if (result.estimatedDays != null && result.state != 3) {
                 Spacer(Modifier.height(12.dp))
                 Row(modifier = Modifier.clip(RoundedCornerShape(10.dp))
