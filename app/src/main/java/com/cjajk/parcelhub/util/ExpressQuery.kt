@@ -6,6 +6,7 @@ import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
 import java.net.URLEncoder
+import java.text.SimpleDateFormat
 import java.util.*
 import java.util.concurrent.TimeUnit
 
@@ -124,7 +125,7 @@ object ExpressQuery {
                     val last = dataArr.getJSONObject(0).optString("time")
                     val t1 = fmt.parse(first)?.time ?: return null
                     val t2 = fmt.parse(last)?.time ?: return null
-                    val elapsedDays = ((t2 - t1) / (1000 * 60 * 60 * 24)).toInt()
+                    val elapsedDays = ((t2 - t1) / (1000L * 60 * 60 * 24)).toInt()
                     when {
                         elapsedDays >= 3 -> 1
                         elapsedDays >= 1 -> 2
