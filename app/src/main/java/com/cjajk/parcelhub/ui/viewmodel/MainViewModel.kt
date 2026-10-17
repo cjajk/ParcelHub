@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cjajk.parcelhub.data.PackageRecord
 import com.cjajk.parcelhub.data.PackageStore
+import com.cjajk.parcelhub.widget.PickupWidget
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
@@ -22,6 +23,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     fun refresh() {
         viewModelScope.launch {
             _packages.value = store.getAll().sortedByDescending { it.timestamp }
+            PickupWidget.refresh(getApplication())
         }
     }
 

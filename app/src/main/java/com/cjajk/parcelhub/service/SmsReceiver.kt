@@ -7,6 +7,7 @@ import android.provider.Telephony
 import android.util.Log
 import com.cjajk.parcelhub.data.PackageStore
 import com.cjajk.parcelhub.data.SmsParser
+import com.cjajk.parcelhub.widget.PickupWidget
 
 class SmsReceiver : BroadcastReceiver() {
     companion object {
@@ -21,6 +22,7 @@ class SmsReceiver : BroadcastReceiver() {
         Log.d("SmsReceiver", "短信 from=$sender body=$body")
         val record = SmsParser.parse(sender, body) ?: return
         PackageStore(context).add(record)
+        PickupWidget.refresh(context)
         context.sendBroadcast(Intent(ACTION_PACKAGE_ARRIVED).setPackage(context.packageName))
     }
 }
