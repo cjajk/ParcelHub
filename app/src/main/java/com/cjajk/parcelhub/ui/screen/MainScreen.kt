@@ -16,9 +16,24 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.Spring
+import androidx.compose.animation.core.animateDpAsState
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideInVertically
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.slideOutVertically
+import androidx.compose.animation.togetherWith
+import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.lazy.LazyRow
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
@@ -57,6 +72,7 @@ import com.cjajk.parcelhub.util.ExpressQueryException
 import com.cjajk.parcelhub.util.ExpressResult
 import com.cjajk.parcelhub.util.COM_LIST
 import kotlinx.coroutines.launch
+import kotlin.math.roundToInt
 import java.text.SimpleDateFormat
 import java.util.*
 
@@ -86,6 +102,7 @@ private fun defaultPlatforms(context: Context) = listOf(
 )
 
 private const val SP_ORDER = "platform_order"
+private const val SP_SIDE_HEIGHT = "side_bar_height"
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -114,13 +131,28 @@ fun MainScreen(vm: MainViewModel) {
     }
 
     var verticalBar by remember { mutableStateOf(false) }
+    val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
+    var sideHeightPx by remember { mutableIntStateOf(sp.getInt(SP_SIDE_HEIGHT, 0)) }
 
-    Scaffold(
-        containerColor = BgBlack,
-        bottomBar = { if (!verticalBar) GlassBottomBar(onToggleVertical = { verticalBar = true }) }
-    ) { padding ->
-        Box(modifier = Modifier.padding(padding)) {
-            Column(modifier = Modifier.fillMaxSize()) {
+    val bottomPad by animateDpAsState(
+        targetValue = if (verticalBar) 0.dp else 84.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "bottomPad"
+    )
+    val endPad by animateDpAsState(
+        targetValue = if (verticalBar) 64.dp else 0.dp,
+        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        label = "endPad"
+    )
+
+    Box(modifier = Modifier.fillMaxSize()) {
+        Scaffold(containerColor = BgBlack) { padding ->
+            Column(
+                modifier = Modifier
+                    .padding(padding)
+                    .padding(bottom = bottomPad, end = endPad)
+                    .fillMaxSize()
+            ) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -155,7 +187,7 @@ fun MainScreen(vm: MainViewModel) {
 
             val list = packages.filter { if (tab == 0) !it.pickedUp else it.pickedUp }
             LazyColumn(
-                contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 120.dp),
+                contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 12.dp),
                 verticalArrangement = Arrangement.spacedBy(12.dp)
             ) {
                 if (queryResult != null) {
@@ -177,12 +209,37 @@ fun MainScreen(vm: MainViewModel) {
                 }
             }
         }
-        if (verticalBar) {
-            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
-                VerticalBarStandalone(onToggleVertical = { verticalBar = false })
+        }
+
+        AnimatedContent(
+            targetState = verticalBar,
+            transitionSpec = {
+                val enter = if (targetState) slideInHorizontally { it } + fadeIn()
+                            else slideInVertically { it } + fadeIn()
+                val exit = if (targetState) slideOutVertically { -it } + fadeOut()
+                           else slideOutHorizontally { -it } + fadeOut()
+                (enter togetherWith exit) using SizeTransform(clip = false) { _, _ ->
+                    spring(
+                        dampingRatio = Spring.DampingRatioMediumBouncy,
+                        stiffness = Spring.StiffnessLow
+                    )
+                }
+            },
+            modifier = Modifier.align(if (verticalBar) Alignment.CenterEnd else Alignment.BottomCenter)
+        ) { isVertical ->
+            if (isVertical) {
+                VerticalBarStandalone(
+                    onToggleVertical = { verticalBar = false },
+                    heightPx = sideHeightPx,
+                    onHeightChange = { px ->
+                        sideHeightPx = px
+                        sp.edit().putInt(SP_SIDE_HEIGHT, px).apply()
+                    }
+                )
+            } else {
+                GlassBottomBar(onToggleVertical = { verticalBar = true })
             }
         }
-    }
     }
 
     if (showSearch) {
@@ -391,7 +448,11 @@ private fun GlassBottomBar(onToggleVertical: () -> Unit) {
     val itemWpx = with(density) { itemW.toPx() }
     var dragIdx by remember { mutableStateOf(-1) }
     var dragOff by remember { mutableFloatStateOf(0f) }
-    val animOff by animateFloatAsState(if (dragIdx >= 0) dragOff else 0f, label = "d")
+    val animOff by animateFloatAsState(
+        targetValue = if (dragIdx >= 0) dragOff else 0f,
+        animationSpec = spring(stiffness = 2000f, dampingRatio = Spring.DampingRatioNoBouncy),
+        label = "d"
+    )
 
     Row(
         modifier = Modifier
@@ -412,30 +473,38 @@ private fun GlassBottomBar(onToggleVertical: () -> Unit) {
                 dragging = dragIdx == index,
                 animatedOffset = if (dragIdx == index) animOff else 0f,
                 onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); dragIdx = index; dragOff = 0f },
-                onDrag = { dx ->
-                    dragOff += dx
-                    val shift = (dragOff / itemWpx).toInt()
-                    if (shift != 0 && index + shift in order.indices) {
-                        val t = order.removeAt(index)
-                        order.add(index + shift, t)
+                onDrag = { dx -> dragOff += dx },
+                onDragEnd = {
+                    val shift = (dragOff / itemWpx).roundToInt()
+                    val target = (dragIdx + shift).coerceIn(0, order.lastIndex)
+                    if (target != dragIdx) {
+                        val t = order.removeAt(dragIdx)
+                        order.add(target, t)
                         sp.edit().putString(SP_ORDER, order.joinToString(",")).apply()
-                        dragOff -= shift * itemWpx
-                        dragIdx = index + shift
                     }
+                    dragIdx = -1
+                    dragOff = 0f
                 },
-                onDragEnd = { dragIdx = -1; dragOff = 0f },
                 onClick = { platform.onClick(context) }
             )
         }
-        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(BorderGray).clickable { onToggleVertical() },
-            contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.SwapHoriz, contentDescription = "转置", tint = TextSecondary, modifier = Modifier.size(16.dp))
-        }
+        TransposeKey(
+            vertical = false,
+            currentHeightPx = 0,
+            minPx = 0,
+            maxPx = 0,
+            onToggle = onToggleVertical,
+            onHeightChange = {}
+        )
     }
 }
 
 @Composable
-private fun VerticalBarStandalone(onToggleVertical: () -> Unit) {
+private fun VerticalBarStandalone(
+    onToggleVertical: () -> Unit,
+    heightPx: Int,
+    onHeightChange: (Int) -> Unit
+) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val allPlatforms = defaultPlatforms(context)
@@ -451,46 +520,115 @@ private fun VerticalBarStandalone(onToggleVertical: () -> Unit) {
     val itemHpx = with(density) { itemH.toPx() }
     var dragIdx by remember { mutableStateOf(-1) }
     var dragOff by remember { mutableFloatStateOf(0f) }
-    val animOff by animateFloatAsState(if (dragIdx >= 0) dragOff else 0f, label = "d")
+    val animOff by animateFloatAsState(
+        targetValue = if (dragIdx >= 0) dragOff else 0f,
+        animationSpec = spring(stiffness = 2000f, dampingRatio = Spring.DampingRatioNoBouncy),
+        label = "d"
+    )
 
-    Column(
-        modifier = Modifier
-            .padding(vertical = 12.dp, horizontal = 8.dp)
-            .clip(RoundedCornerShape(32.dp))
-            .background(BarDark.copy(alpha = 0.9f))
-            .border(1.dp, BorderGray, RoundedCornerShape(32.dp))
-            .padding(vertical = 10.dp, horizontal = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally,
-        verticalArrangement = Arrangement.SpaceEvenly
-    ) {
-        order.forEachIndexed { index, id ->
-            val platform = allPlatforms.first { it.id == id }
-            ReorderableIcon(
-                platform = platform,
-                shaking = dragIdx >= 0 && dragIdx != index,
-                dragging = dragIdx == index,
-                animatedOffset = if (dragIdx == index) animOff else 0f,
+    BoxWithConstraints(modifier = Modifier) {
+        val maxPx = with(density) { maxHeight.roundToPx() }
+        val minPx = with(density) { 220.dp.roundToPx() }
+        val effectiveHeight = heightPx.takeIf { it in minPx..maxPx } ?: (maxPx / 2)
+
+        Column(
+            modifier = Modifier
+                .width(64.dp)
+                .height(with(density) { effectiveHeight.toDp() })
+                .padding(vertical = 12.dp, horizontal = 8.dp)
+                .clip(RoundedCornerShape(32.dp))
+                .background(BarDark.copy(alpha = 0.9f))
+                .border(1.dp, BorderGray, RoundedCornerShape(32.dp))
+                .padding(vertical = 10.dp, horizontal = 8.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.SpaceEvenly
+        ) {
+            order.forEachIndexed { index, id ->
+                val platform = allPlatforms.first { it.id == id }
+                ReorderableIcon(
+                    platform = platform,
+                    shaking = dragIdx >= 0 && dragIdx != index,
+                    dragging = dragIdx == index,
+                    animatedOffset = if (dragIdx == index) animOff else 0f,
+                    vertical = true,
+                    onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); dragIdx = index; dragOff = 0f },
+                    onDrag = { dy -> dragOff += dy },
+                    onDragEnd = {
+                        val shift = (dragOff / itemHpx).roundToInt()
+                        val target = (dragIdx + shift).coerceIn(0, order.lastIndex)
+                        if (target != dragIdx) {
+                            val t = order.removeAt(dragIdx)
+                            order.add(target, t)
+                            sp.edit().putString(SP_ORDER, order.joinToString(",")).apply()
+                        }
+                        dragIdx = -1
+                        dragOff = 0f
+                    },
+                    onClick = { platform.onClick(context) }
+                )
+            }
+            TransposeKey(
                 vertical = true,
-                onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); dragIdx = index; dragOff = 0f },
-                onDrag = { dy ->
-                    dragOff += dy
-                    val shift = (dragOff / itemHpx).toInt()
-                    if (shift != 0 && index + shift in order.indices) {
-                        val t = order.removeAt(index)
-                        order.add(index + shift, t)
-                        sp.edit().putString(SP_ORDER, order.joinToString(",")).apply()
-                        dragOff -= shift * itemHpx
-                        dragIdx = index + shift
-                    }
-                },
-                onDragEnd = { dragIdx = -1; dragOff = 0f },
-                onClick = { platform.onClick(context) }
+                currentHeightPx = effectiveHeight,
+                minPx = minPx,
+                maxPx = maxPx,
+                onToggle = onToggleVertical,
+                onHeightChange = onHeightChange
             )
         }
-        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(BorderGray).clickable { onToggleVertical() },
-            contentAlignment = Alignment.Center) {
-            Icon(Icons.Default.SwapVert, contentDescription = "转回", tint = TextSecondary, modifier = Modifier.size(16.dp))
-        }
+    }
+}
+
+@Composable
+private fun TransposeKey(
+    vertical: Boolean,
+    currentHeightPx: Int,
+    minPx: Int,
+    maxPx: Int,
+    onToggle: () -> Unit,
+    onHeightChange: (Int) -> Unit
+) {
+    var dragActive by remember { mutableStateOf(false) }
+    var startHeight by remember { mutableIntStateOf(currentHeightPx) }
+    var acc by remember { mutableFloatStateOf(0f) }
+
+    Box(
+        modifier = Modifier
+            .size(36.dp)
+            .clip(CircleShape)
+            .background(BorderGray)
+            .clickable { onToggle() }
+            .then(
+                if (vertical) Modifier.pointerInput(Unit) {
+                    detectDragGesturesAfterLongPress(
+                        onDragStart = {
+                            startHeight = currentHeightPx
+                            acc = 0f
+                            dragActive = true
+                        },
+                        onDrag = { change, amount ->
+                            change.consume()
+                            acc += amount.y
+                            val new = (startHeight + acc).roundToInt().coerceIn(minPx, maxPx)
+                            onHeightChange(new)
+                        },
+                        onDragEnd = { dragActive = false },
+                        onDragCancel = { dragActive = false }
+                    )
+                } else Modifier
+            )
+            .graphicsLayer {
+                scaleX = if (dragActive) 1.18f else 1f
+                scaleY = if (dragActive) 1.18f else 1f
+            },
+        contentAlignment = Alignment.Center
+    ) {
+        Icon(
+            imageVector = if (vertical) Icons.Default.SwapVert else Icons.Default.SwapHoriz,
+            contentDescription = if (vertical) "转回底部" else "转至侧边",
+            tint = TextSecondary,
+            modifier = Modifier.size(16.dp)
+        )
     }
 }
 
@@ -514,6 +652,16 @@ private fun ReorderableIcon(
         animationSpec = infiniteRepeatable(tween(80), RepeatMode.Reverse),
         label = "rot"
     )
+    val iconScale by animateFloatAsState(
+        targetValue = if (dragging) 1.2f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "scale"
+    )
+    val iconAlpha by animateFloatAsState(
+        targetValue = if (dragging) 0.92f else 1f,
+        animationSpec = spring(stiffness = Spring.StiffnessMedium),
+        label = "alpha"
+    )
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -534,9 +682,10 @@ private fun ReorderableIcon(
                 translationX = if (vertical) 0f else animatedOffset
                 translationY = if (vertical) animatedOffset else 0f
                 rotationZ = if (shaking) shakeRot else 0f
-                scaleX = if (dragging) 1.2f else 1f
-                scaleY = if (dragging) 1.2f else 1f
-                alpha = if (dragging) 0.9f else 1f
+                scaleX = iconScale
+                scaleY = iconScale
+                alpha = iconAlpha
+                shadowElevation = if (dragging) 14f else 0f
             }
     ) {
         Icon(
