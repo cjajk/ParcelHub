@@ -6,18 +6,22 @@ import android.content.IntentFilter
 import android.os.Build
 import android.widget.Toast
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.filled.*
+import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
@@ -50,23 +54,32 @@ fun MainScreen(vm: MainViewModel) {
         onDispose { context.unregisterReceiver(receiver) }
     }
 
-    Scaffold(topBar = { TopBar(vm) }) { padding ->
+    Scaffold(
+        containerColor = Color(0xFFF2F3F7),
+        bottomBar = { GlassBottomBar() }
+    ) { padding ->
         Column(modifier = Modifier.padding(padding)) {
-            TabRow(selectedTabIndex = tab) {
+            Text(
+                "快递聚合",
+                style = MaterialTheme.typography.headlineMedium,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.padding(start = 20.dp, top = 16.dp, bottom = 8.dp)
+            )
+            TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
                 val waiting = packages.count { !it.pickedUp }
                 val done = packages.count { it.pickedUp }
                 Tab(selected = tab == 0, onClick = { tab = 0 },
-                    text = { Text("待取 ($waiting)") })
+                    text = { Text("待取 $waiting", fontWeight = FontWeight.Medium) })
                 Tab(selected = tab == 1, onClick = { tab = 1 },
-                    text = { Text("已取 ($done)") })
+                    text = { Text("已取 $done", fontWeight = FontWeight.Medium) })
             }
             val list = packages.filter { if (tab == 0) !it.pickedUp else it.pickedUp }
             if (list.isEmpty()) {
                 EmptyHint(tab)
             } else {
                 LazyColumn(
-                    contentPadding = PaddingValues(12.dp),
-                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                    contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 110.dp),
+                    verticalArrangement = Arrangement.spacedBy(12.dp)
                 ) {
                     items(list, key = { it.id }) { item ->
                         PackageCard(item, onToggle = { vm.togglePickedUp(item) })
@@ -78,54 +91,59 @@ fun MainScreen(vm: MainViewModel) {
 }
 
 @Composable
-private fun TopBar(vm: MainViewModel) {
+private fun GlassBottomBar() {
     val context = LocalContext.current
-    Surface(color = MaterialTheme.colorScheme.primaryContainer) {
-        Column(modifier = Modifier.padding(horizontal = 12.dp, vertical = 10.dp)) {
-            Text("快递聚合", style = MaterialTheme.typography.titleLarge,
-                fontWeight = FontWeight.Bold)
-            Spacer(Modifier.height(8.dp))
-            Row(
-                horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.fillMaxWidth()
-            ) {
-                QuickBtn("淘宝", Icons.Default.ShoppingCart, Modifier.weight(1f)) {
-                    DeepLinks.openTaobaoIdentity(context)
-                }
-                QuickBtn("拼多多", Icons.Default.Store, Modifier.weight(1f)) {
-                    DeepLinks.openPddPickup(context)
-                }
-                QuickBtn("菜鸟", Icons.Default.LocalShipping, Modifier.weight(1f)) {
-                    DeepLinks.openAlipayCainiao(context)
-                }
-                QuickBtn("顺丰", Icons.Default.MailOutline, Modifier.weight(1f)) {
-                    DeepLinks.openSf(context)
-                }
-                QuickBtn("京东", Icons.Default.ShoppingBag, Modifier.weight(1f)) {
-                    DeepLinks.openJd(context)
-                }
-            }
-            TextButton(onClick = { vm.addFake() }) {
-                Text("+ 测试一条", fontSize = 11.sp)
-            }
+    Box(
+        modifier = Modifier
+            .fillMaxWidth()
+            .padding(horizontal = 12.dp, vertical = 12.dp)
+    ) {
+        Row(
+            modifier = Modifier
+                .fillMaxWidth()
+                .clip(RoundedCornerShape(28.dp))
+                .background(
+                    Brush.horizontalGradient(
+                        listOf(
+                            Color.White.copy(alpha = 0.75f),
+                            Color.White.copy(alpha = 0.55f)
+                        )
+                    )
+                )
+                .border(1.dp, Color.White.copy(alpha = 0.6f), RoundedCornerShape(28.dp))
+                .padding(vertical = 12.dp, horizontal = 8.dp),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            PlatformBtn("淘", Color(0xFFFF6A00)) { DeepLinks.openTaobaoIdentity(context) }
+            PlatformBtn("拼", Color(0xFFE2231A)) { DeepLinks.openPddPickup(context) }
+            PlatformBtn("菜", Color(0xFF1E88E5)) { DeepLinks.openAlipayCainiao(context) }
+            PlatformBtn("顺", Color(0xFF1A1A1A)) { DeepLinks.openSf(context) }
+            PlatformBtn("JD", Color(0xFFE1251B)) { DeepLinks.openJd(context) }
         }
     }
 }
 
 @Composable
-private fun RowScope.QuickBtn(label: String, icon: androidx.compose.ui.graphics.vector.ImageVector,
-                              modifier: Modifier, onClick: () -> Unit) {
+private fun PlatformBtn(label: String, bg: Color, onClick: () -> Unit) {
     Column(
-        modifier = modifier
-            .clip(RoundedCornerShape(10.dp))
-            .background(MaterialTheme.colorScheme.surface)
-            .clickable { onClick() }
-            .padding(vertical = 8.dp),
-        horizontalAlignment = Alignment.CenterHorizontally
+        horizontalAlignment = Alignment.CenterHorizontally,
+        modifier = Modifier.clickable(onClick = onClick)
     ) {
-        Icon(icon, contentDescription = label, modifier = Modifier.size(22.dp))
-        Spacer(Modifier.height(4.dp))
-        Text(label, fontSize = 12.sp)
+        Box(
+            modifier = Modifier
+                .size(46.dp)
+                .clip(CircleShape)
+                .background(bg),
+            contentAlignment = Alignment.Center
+        ) {
+            Text(
+                label,
+                color = Color.White,
+                fontWeight = FontWeight.Bold,
+                fontSize = if (label.length > 1) 13.sp else 17.sp
+            )
+        }
     }
 }
 
@@ -134,7 +152,9 @@ private fun PackageCard(item: PackageRecord, onToggle: () -> Unit) {
     val context = LocalContext.current
     Card(
         modifier = Modifier.fillMaxWidth(),
-        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(20.dp),
+        colors = CardDefaults.cardColors(containerColor = Color.White),
+        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp),
         onClick = {
             val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
             cm.setPrimaryClip(android.content.ClipData.newPlainText("取件码", item.code))
@@ -142,27 +162,33 @@ private fun PackageCard(item: PackageRecord, onToggle: () -> Unit) {
         }
     ) {
         Row(
-            modifier = Modifier.padding(16.dp),
+            modifier = Modifier.padding(20.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
             Column(modifier = Modifier.weight(1f)) {
-                Text(item.code, fontSize = 32.sp, fontWeight = FontWeight.Bold,
-                    color = MaterialTheme.colorScheme.primary)
+                Text(
+                    item.code,
+                    fontSize = 36.sp,
+                    fontWeight = FontWeight.Bold,
+                    color = Color(0xFF1B5E20)
+                )
                 if (item.station.isNotBlank()) {
+                    Spacer(Modifier.height(4.dp))
                     Text(item.station, style = MaterialTheme.typography.bodyMedium)
                 }
+                Spacer(Modifier.height(4.dp))
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     if (item.carrier.isNotBlank()) {
                         Text(item.carrier, style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            color = Color(0xFF888888))
                         Spacer(Modifier.width(8.dp))
                     }
                     Text(formatTime(item.timestamp),
                         style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        color = Color(0xFFAAAAAA))
                 }
             }
-            FilledTonalButton(onClick = onToggle) {
+            FilledTonalButton(onClick = onToggle, shape = RoundedCornerShape(14.dp)) {
                 Text(if (item.pickedUp) "撤销" else "已取")
             }
         }
@@ -174,13 +200,13 @@ private fun EmptyHint(tab: Int) {
     Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         Column(horizontalAlignment = Alignment.CenterHorizontally) {
             Icon(Icons.Default.Inbox, contentDescription = null,
-                modifier = Modifier.size(64.dp), tint = MaterialTheme.colorScheme.outline)
+                modifier = Modifier.size(64.dp), tint = Color(0xFFCCCCCC))
             Spacer(Modifier.height(12.dp))
             Text(
-                if (tab == 0) "没有待取的快递\n收到取件短信后会自动出现在这里"
+                if (tab == 0) "没有待取的快递\n收到取件短信后会自动出现"
                 else "没有已取记录",
                 style = MaterialTheme.typography.bodyLarge,
-                color = MaterialTheme.colorScheme.onSurfaceVariant
+                color = Color(0xFF999999)
             )
         }
     }
