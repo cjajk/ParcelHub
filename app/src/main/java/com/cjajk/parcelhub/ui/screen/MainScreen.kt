@@ -5,6 +5,18 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.os.Build
 import android.widget.Toast
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloatAsState
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.expandVertically
+import androidx.compose.animation.shrinkVertically
+import androidx.compose.animation.expandHorizontally
+import androidx.compose.animation.shrinkHorizontally
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -13,6 +25,7 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
@@ -23,6 +36,8 @@ import androidx.compose.material.icons.filled.ShoppingCart
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.LocalPostOffice
 import androidx.compose.material.icons.filled.Store
+import androidx.compose.material.icons.filled.SwapHoriz
+import androidx.compose.material.icons.filled.SwapVert
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableFloatStateOf
@@ -103,11 +118,14 @@ fun MainScreen(vm: MainViewModel) {
         onDispose { context.unregisterReceiver(receiver) }
     }
 
+    var verticalBar by remember { mutableStateOf(false) }
+
     Scaffold(
         containerColor = BgBlack,
-        bottomBar = { GlassBottomBar() }
+        bottomBar = { if (!verticalBar) GlassBottomBar(onToggleVertical = { verticalBar = true }) }
     ) { padding ->
-        Column(modifier = Modifier.padding(padding)) {
+        Box(modifier = Modifier.padding(padding)) {
+            Column(modifier = Modifier.fillMaxSize()) {
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -162,6 +180,11 @@ fun MainScreen(vm: MainViewModel) {
                     PackageCard(item, onToggle = { vm.togglePickedUp(item) },
                         onDelete = { vm.delete(item) })
                 }
+            }
+        }
+        if (verticalBar) {
+            Box(modifier = Modifier.fillMaxSize(), contentAlignment = Alignment.CenterEnd) {
+                VerticalBarStandalone(onToggleVertical = { verticalBar = false })
             }
         }
     }
@@ -356,79 +379,165 @@ private fun ExpressQueryCard(result: ExpressResult, onDismiss: () -> Unit, onSav
 }
 
 @Composable
-private fun GlassBottomBar() {
+private fun GlassBottomBar(onToggleVertical: () -> Unit) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val allPlatforms = defaultPlatforms(context)
-
     val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
     var order by remember {
-        mutableStateOf(
-            sp.getString(SP_ORDER, null)?.split(",")?.filter { id -> allPlatforms.any { it.id == id } }
-                ?: allPlatforms.map { it.id }
-        )
+        mutableStateListOf<String>().apply {
+            addAll(sp.getString(SP_ORDER, null)?.split(",")?.filter { id -> allPlatforms.any { it.id == id } }
+                ?: allPlatforms.map { it.id })
+        }
     }
-    val orderedPlatforms = order.map { id -> allPlatforms.first { it.id == id } }
+    val density = LocalDensity.current
+    val itemW = 56.dp
+    val itemWpx = with(density) { itemW.toPx() }
+    var dragIdx by remember { mutableStateOf(-1) }
+    var dragOff by remember { mutableFloatStateOf(0f) }
+    val animOff by animateFloatAsState(if (dragIdx >= 0) dragOff else 0f, label = "d")
 
-    Box(
+    Row(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(horizontal = 12.dp, vertical = 16.dp)
+            .padding(horizontal = 12.dp, vertical = 12.dp)
+            .clip(RoundedCornerShape(32.dp))
+            .background(BarDark.copy(alpha = 0.9f))
+            .border(1.dp, BorderGray, RoundedCornerShape(32.dp))
+            .padding(vertical = 10.dp, horizontal = 8.dp),
+        horizontalArrangement = Arrangement.SpaceEvenly,
+        verticalAlignment = Alignment.CenterVertically
     ) {
-        Row(
-            modifier = Modifier
-                .fillMaxWidth()
-                .clip(RoundedCornerShape(32.dp))
-                .background(BarDark.copy(alpha = 0.9f))
-                .border(1.dp, BorderGray, RoundedCornerShape(32.dp))
-                .padding(vertical = 14.dp, horizontal = 12.dp),
-            horizontalArrangement = Arrangement.SpaceEvenly,
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            orderedPlatforms.forEach { platform ->
-                DraggablePlatformBtn(platform = platform,
-                    onDragStart = { haptic.performHapticFeedback(HapticFeedbackType.LongPress) },
-                    onSwap = { from, to ->
-                        order = order.toMutableList().apply {
-                            val t = removeAt(from)
-                            add(to, t)
-                        }
+        order.forEachIndexed { index, id ->
+            val platform = allPlatforms.first { it.id == id }
+            ReorderableIcon(
+                platform = platform,
+                shaking = dragIdx >= 0 && dragIdx != index,
+                dragging = dragIdx == index,
+                animatedOffset = if (dragIdx == index) animOff else 0f,
+                onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); dragIdx = index; dragOff = 0f },
+                onDrag = { dx ->
+                    dragOff += dx
+                    val shift = (dragOff / itemWpx).toInt()
+                    if (shift != 0 && index + shift in order.indices) {
+                        order = order.toMutableList().apply { val t = removeAt(index); add(index + shift, t) }
                         sp.edit().putString(SP_ORDER, order.joinToString(",")).apply()
-                    })
-            }
+                        dragOff -= shift * itemWpx
+                        dragIdx = index + shift
+                    }
+                },
+                onDragEnd = { dragIdx = -1; dragOff = 0f },
+                onClick = { platform.onClick(context) }
+            )
+        }
+        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(BorderGray).clickable { onToggleVertical() },
+            contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.SwapHoriz, contentDescription = "转置", tint = TextSecondary, modifier = Modifier.size(16.dp))
         }
     }
 }
 
 @Composable
-private fun DraggablePlatformBtn(
-    platform: Platform,
-    onDragStart: () -> Unit,
-    onSwap: (Int, Int) -> Unit
-) {
+private fun VerticalBarStandalone(onToggleVertical: () -> Unit) {
     val context = LocalContext.current
-    var dragging by remember { mutableStateOf(false) }
-    var dragX by remember { mutableFloatStateOf(0f) }
+    val haptic = LocalHapticFeedback.current
+    val allPlatforms = defaultPlatforms(context)
+    val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
+    var order by remember {
+        mutableStateListOf<String>().apply {
+            addAll(sp.getString(SP_ORDER, null)?.split(",")?.filter { id -> allPlatforms.any { it.id == id } }
+                ?: allPlatforms.map { it.id })
+        }
+    }
+    val density = LocalDensity.current
+    val itemH = 56.dp
+    val itemHpx = with(density) { itemH.toPx() }
+    var dragIdx by remember { mutableStateOf(-1) }
+    var dragOff by remember { mutableFloatStateOf(0f) }
+    val animOff by animateFloatAsState(if (dragIdx >= 0) dragOff else 0f, label = "d")
+
+    Column(
+        modifier = Modifier
+            .padding(vertical = 12.dp, horizontal = 8.dp)
+            .clip(RoundedCornerShape(32.dp))
+            .background(BarDark.copy(alpha = 0.9f))
+            .border(1.dp, BorderGray, RoundedCornerShape(32.dp))
+            .padding(vertical = 10.dp, horizontal = 8.dp),
+        horizontalAlignment = Alignment.CenterHorizontally,
+        verticalArrangement = Arrangement.SpaceEvenly
+    ) {
+        order.forEachIndexed { index, id ->
+            val platform = allPlatforms.first { it.id == id }
+            ReorderableIcon(
+                platform = platform,
+                shaking = dragIdx >= 0 && dragIdx != index,
+                dragging = dragIdx == index,
+                animatedOffset = if (dragIdx == index) animOff else 0f,
+                vertical = true,
+                onLongPress = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); dragIdx = index; dragOff = 0f },
+                onDrag = { dy ->
+                    dragOff += dy
+                    val shift = (dragOff / itemHpx).toInt()
+                    if (shift != 0 && index + shift in order.indices) {
+                        order = order.toMutableList().apply { val t = removeAt(index); add(index + shift, t) }
+                        sp.edit().putString(SP_ORDER, order.joinToString(",")).apply()
+                        dragOff -= shift * itemHpx
+                        dragIdx = index + shift
+                    }
+                },
+                onDragEnd = { dragIdx = -1; dragOff = 0f },
+                onClick = { platform.onClick(context) }
+            )
+        }
+        Box(modifier = Modifier.size(36.dp).clip(CircleShape).background(BorderGray).clickable { onToggleVertical() },
+            contentAlignment = Alignment.Center) {
+            Icon(Icons.Default.SwapVert, contentDescription = "转回", tint = TextSecondary, modifier = Modifier.size(16.dp))
+        }
+    }
+}
+
+@Composable
+private fun ReorderableIcon(
+    platform: Platform,
+    shaking: Boolean,
+    dragging: Boolean,
+    animatedOffset: Float,
+    modifier: Modifier = Modifier,
+    vertical: Boolean = false,
+    onLongPress: () -> Unit,
+    onDrag: (Float) -> Unit,
+    onDragEnd: () -> Unit,
+    onClick: () -> Unit
+) {
+    val haptic = LocalHapticFeedback.current
+    val infinite = rememberInfiniteTransition(label = "shake")
+    val shakeRot by infinite.animateFloat(
+        initialValue = -3f, targetValue = 3f,
+        animationSpec = infiniteRepeatable(tween(80), RepeatMode.Reverse),
+        label = "rot"
+    )
 
     Column(
         horizontalAlignment = Alignment.CenterHorizontally,
-        modifier = Modifier
+        modifier = modifier
             .pointerInput(platform.id) {
                 detectDragGesturesAfterLongPress(
-                    onDragStart = { onDragStart(); dragging = true },
-                    onDrag = { change, dragAmount ->
+                    onDragStart = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); onLongPress() },
+                    onDrag = { change, amount ->
                         change.consume()
-                        dragX += dragAmount.x
+                        onDrag(if (vertical) amount.y else amount.x)
                     },
-                    onDragEnd = { dragging = false; dragX = 0f },
-                    onDragCancel = { dragging = false; dragX = 0f }
+                    onDragEnd = { onDragEnd() },
+                    onDragCancel = { onDragEnd() }
                 )
             }
-            .clickable { platform.onClick(context) }
+            .clickable { onClick() }
             .graphicsLayer {
-                translationX = if (dragging) dragX else 0f
-                scaleX = if (dragging) 1.15f else 1f
-                scaleY = if (dragging) 1.15f else 1f
+                translationX = if (vertical) 0f else animatedOffset
+                translationY = if (vertical) animatedOffset else 0f
+                rotationZ = if (shaking) shakeRot else 0f
+                scaleX = if (dragging) 1.2f else 1f
+                scaleY = if (dragging) 1.2f else 1f
                 alpha = if (dragging) 0.9f else 1f
             }
     ) {
@@ -436,10 +545,10 @@ private fun DraggablePlatformBtn(
             imageVector = platform.icon,
             contentDescription = platform.label,
             tint = TextPrimary,
-            modifier = Modifier.size(26.dp)
+            modifier = Modifier.size(24.dp)
         )
-        Spacer(Modifier.height(6.dp))
-        Text(platform.label, fontSize = 11.sp, color = TextSecondary)
+        Spacer(Modifier.height(4.dp))
+        Text(platform.label, fontSize = 10.sp, color = TextSecondary)
     }
 }
 
