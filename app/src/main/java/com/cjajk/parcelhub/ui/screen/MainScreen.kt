@@ -27,6 +27,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Search
@@ -101,6 +102,7 @@ fun MainScreen(vm: MainViewModel) {
     var tab by remember { mutableIntStateOf(0) }
     var showSearch by remember { mutableStateOf(false) }
     var showAdd by remember { mutableStateOf(false) }
+    var parsedSms by remember { mutableStateOf<ParsedSms?>(null) }
     var queryResult by remember { mutableStateOf<ExpressResult?>(null) }
     var queryLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -162,6 +164,19 @@ fun MainScreen(vm: MainViewModel) {
                         color = TextPrimary,
                         modifier = Modifier.weight(1f)
                     )
+                    IconButton(onClick = {
+                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val text = cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
+                        val parsed = parseSms(text)
+                        if (parsed != null) {
+                            parsedSms = parsed
+                        } else {
+                            Toast.makeText(context, "剪贴板里没解析到取件码", Toast.LENGTH_SHORT).show()
+                        }
+                    }) {
+                        Icon(Icons.Default.ContentPaste, contentDescription = "导入短信", tint = TextPrimary,
+                            modifier = Modifier.size(28.dp))
+                    }
                     IconButton(onClick = { showAdd = true }) {
                         Icon(Icons.Default.Add, contentDescription = "手动添加", tint = TextPrimary,
                             modifier = Modifier.size(28.dp))
@@ -271,6 +286,38 @@ fun MainScreen(vm: MainViewModel) {
                 showAdd = false
                 vm.addManual(code, station, carrier)
                 Toast.makeText(context, "已添加", Toast.LENGTH_SHORT).show()
+            }
+        )
+    }
+
+    parsedSms?.let { parsed ->
+        AlertDialog(
+            onDismissRequest = { parsedSms = null },
+            containerColor = CardDark,
+            title = { Text("解析到取件码", color = TextPrimary, fontWeight = FontWeight.Bold) },
+            text = {
+                Column {
+                    Text("取件码", color = TextSecondary, fontSize = 12.sp)
+                    Text(parsed.code, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = CodeGreen)
+                    Spacer(Modifier.height(12.dp))
+                    Text("驿站/地址", color = TextSecondary, fontSize = 12.sp)
+                    Text(parsed.station.ifBlank { "未识别" }, color = TextPrimary)
+                    Spacer(Modifier.height(12.dp))
+                    Text("快递公司", color = TextSecondary, fontSize = 12.sp)
+                    Text(parsed.carrier.ifBlank { "未识别" }, color = TextPrimary)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    vm.addManual(parsed.code, parsed.station, parsed.carrier)
+                    Toast.makeText(context, "已添加", Toast.LENGTH_SHORT).show()
+                    parsedSms = null
+                }) {
+                    Text("添加", color = AccentBlue, fontWeight = FontWeight.Bold)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { parsedSms = null }) { Text("取消", color = TextSecondary) }
             }
         )
     }
@@ -803,6 +850,54 @@ private fun EmptyHint(tab: Int) {
             )
         }
     }
+}
+
+private data class ParsedSms(val code: String, val station: String, val carrier: String)
+
+private fun parseSms(text: String): ParsedSms? {
+    if (text.isBlank()) return null
+
+    var carrier = ""
+    val bracket = Regex("【(.+?)】").find(text)
+    if (bracket != null) {
+        carrier = bracket.groupValues[1]
+    } else {
+        val known = listOf(
+            "京东" to "京东快递", "顺丰" to "顺丰速运", "菜鸟" to "菜鸟驿站",
+            "中通" to "中通快递", "圆通" to "圆通速递", "韵达" to "韵达快递",
+            "申通" to "申通快递", "极兔" to "极兔速递", "邮政" to "邮政包裹",
+            "EMS" to "EMS", "丹鸟" to "丹鸟"
+        )
+        for ((k, v) in known) {
+            if (text.contains(k, ignoreCase = true)) { carrier = v; break }
+        }
+    }
+
+    val codePatterns = listOf(
+        Regex("取件码[:：]?\\s*([A-Za-z]?\\d+-\\d+(?:-\\d+)?)"),
+        Regex("([A-Za-z]\\d+-\\d+(?:-\\d+)?)"),
+        Regex("(\\d+-\\d+-\\d+)"),
+        Regex("(\\d+-\\d+)")
+    )
+    var code = ""
+    for (p in codePatterns) {
+        val m = p.find(text)
+        if (m != null) { code = m.groupValues[1]; break }
+    }
+    if (code.isBlank()) return null
+
+    var station = ""
+    val addrPatterns = listOf(
+        Regex("地址[:：]\\s*(.+?)(?:[，。,\\n]|$)"),
+        Regex("(?:送达|到达|投放至|放在|存至)(.+?)(?:[，。,\\n]|$)"),
+        Regex("(.+?(?:驿站|服务站|快递柜|菜鸟柜|速递易|丰巢))")
+    )
+    for (p in addrPatterns) {
+        val m = p.find(text)
+        if (m != null) { station = m.groupValues[1].trim(); break }
+    }
+
+    return ParsedSms(code, station, carrier)
 }
 
 private fun formatTime(ts: Long): String {
