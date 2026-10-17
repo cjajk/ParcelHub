@@ -21,7 +21,6 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        // 申请短信权限 + 通知权限
         val perms = mutableListOf(
             Manifest.permission.RECEIVE_SMS,
             Manifest.permission.READ_SMS
@@ -36,9 +35,7 @@ class MainActivity : ComponentActivity() {
 
         setContent {
             ParcelHubTheme {
-                val vm: MainViewModel = viewModel(
-                    factory = androidx.lifecycle.viewmodel.ViewModelProvider.AndroidViewModelFactory.getInstance(application)
-                )
+                val vm: MainViewModel = viewModel()
                 MainScreen(vm)
             }
         }
