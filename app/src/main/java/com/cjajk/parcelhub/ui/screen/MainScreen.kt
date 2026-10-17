@@ -184,7 +184,7 @@ private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (Stri
                         readOnly = true,
                         label = { Text("快递公司") },
                         trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier.menuAnchor(ExposedDropdownMenuDefaults.MenuAnchorType.PrimaryNotEditable).fillMaxWidth(),
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                         colors = OutlinedTextFieldDefaults.colors(
                             focusedTextColor = TextPrimary,
