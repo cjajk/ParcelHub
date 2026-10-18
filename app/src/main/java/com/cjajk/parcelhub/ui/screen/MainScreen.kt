@@ -21,6 +21,8 @@ import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGesturesAfterLongPress
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
@@ -29,6 +31,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Inbox
+import androidx.compose.material.icons.filled.Key
 import androidx.compose.material.icons.filled.LocalShipping
 import androidx.compose.material.icons.filled.Search
 import androidx.compose.material.icons.filled.ShoppingBag
@@ -65,6 +68,7 @@ import com.cjajk.parcelhub.service.SmsReceiver
 import com.cjajk.parcelhub.ui.viewmodel.MainViewModel
 import com.cjajk.parcelhub.util.COM_LIST
 import com.cjajk.parcelhub.util.DeepLinks
+import com.cjajk.parcelhub.util.ExpressKeyStore
 import com.cjajk.parcelhub.util.ExpressQuery
 import com.cjajk.parcelhub.util.ExpressQueryException
 import com.cjajk.parcelhub.util.ExpressResult
@@ -110,6 +114,7 @@ fun MainScreen(vm: MainViewModel) {
     var showSearch by remember { mutableStateOf(false) }
     var showAdd by remember { mutableStateOf(false) }
     var showPasteImport by remember { mutableStateOf(false) }
+    var showKeyConfig by remember { mutableStateOf(false) }
     var queryResult by remember { mutableStateOf<ExpressResult?>(null) }
     var queryLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -260,13 +265,16 @@ fun MainScreen(vm: MainViewModel) {
         SearchDialog(
             loading = queryLoading,
             onDismiss = { showSearch = false },
+            onConfigKey = { showKeyConfig = true },
             onQuery = { nu, com, phone ->
                 showSearch = false
                 queryLoading = true
                 queryResult = null
                 scope.launch {
                     try {
-                        val result = ExpressQuery.query(nu, com, phone.ifBlank { null })
+                        val customer = ExpressKeyStore.getCustomer(context)
+                        val key = ExpressKeyStore.getKey(context)
+                        val result = ExpressQuery.query(nu, com, phone.ifBlank { null }, customer, key)
                         queryResult = result
                     } catch (e: ExpressQueryException) {
                         Toast.makeText(context, e.message, Toast.LENGTH_LONG).show()
@@ -293,7 +301,6 @@ fun MainScreen(vm: MainViewModel) {
             onDismiss = { showPasteImport = false },
             onImport = { raw ->
                 showPasteImport = false
-                // 按换行分割成多条短信，逐条解析
                 val blocks = raw.split(Regex("\\n\\s*\\n|\\n"))
                     .map { it.trim() }
                     .filter { it.isNotBlank() }
@@ -309,9 +316,161 @@ fun MainScreen(vm: MainViewModel) {
             }
         )
     }
+
+    if (showKeyConfig) {
+        KeyConfigDialog(onDismiss = { showKeyConfig = false })
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun SearchDialog(
+    loading: Boolean,
+    onDismiss: () -> Unit,
+    onConfigKey: () -> Unit,
+    onQuery: (String, String?, String) -> Unit
+) {
+    val context = LocalContext.current
+    var text by remember { mutableStateOf("") }
+    var expanded by remember { mutableStateOf(false) }
+    var selectedCom by remember { mutableStateOf<Pair<String, String>?>(null) }
+    var phone by remember { mutableStateOf("") }
+    val configured = remember { ExpressKeyStore.isConfigured(context) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardDark,
+        title = { Text("查询快递", color = TextPrimary, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                // 配置密钥状态行
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier
+                        .clip(RoundedCornerShape(8.dp))
+                        .background(if (configured) CodeGreen.copy(alpha = 0.1f) else Color(0xFFFF9F0A).copy(alpha = 0.1f))
+                        .clickable { onConfigKey() }
+                        .padding(horizontal = 10.dp, vertical = 6.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Key,
+                        contentDescription = null,
+                        tint = if (configured) CodeGreen else Color(0xFFFF9F0A),
+                        modifier = Modifier.size(14.dp)
+                    )
+                    Spacer(Modifier.width(6.dp))
+                    Text(
+                        if (configured) "快递100密钥已配置 ✓" else "未配置快递100密钥，点此配置",
+                        fontSize = 12.sp,
+                        color = if (configured) CodeGreen else Color(0xFFFF9F0A),
+                        modifier = Modifier.weight(1f)
+                    )
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(value = text, onValueChange = { text = it },
+                    label = { Text("输入快递单号") }, singleLine = true,
+                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
+                Spacer(Modifier.height(12.dp))
+                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
+                    OutlinedTextField(
+                        value = selectedCom?.second ?: "自动识别（可选）",
+                        onValueChange = {}, readOnly = true,
+                        label = { Text("快递公司") },
+                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                        modifier = Modifier.menuAnchor().fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
+                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
+                        containerColor = CardDark) {
+                        COM_LIST.forEach { item ->
+                            DropdownMenuItem(text = { Text(item.second, color = TextPrimary) },
+                                onClick = { selectedCom = item; expanded = false })
+                        }
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(value = phone, onValueChange = { if (it.length <= 4) phone = it },
+                    label = { Text("手机后4位（顺丰/京东必填）") }, singleLine = true,
+                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
+                if (loading) {
+                    Spacer(Modifier.height(12.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Text("查询中...", color = TextSecondary, fontSize = 13.sp)
+                    }
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = { if (text.isNotBlank()) onQuery(text.trim(), selectedCom?.first, phone) },
+                enabled = text.isNotBlank() && !loading && configured
+            ) {
+                Text("查询", color = AccentBlue, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) } }
+    )
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun KeyConfigDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    var customer by remember { mutableStateOf(ExpressKeyStore.getCustomer(context)) }
+    var key by remember { mutableStateOf(ExpressKeyStore.getKey(context)) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardDark,
+        title = { Text("配置快递100密钥", color = TextPrimary, fontWeight = FontWeight.Bold) },
+        text = {
+            Column(
+                modifier = Modifier.verticalScroll(rememberScrollState())
+            ) {
+                OutlinedTextField(
+                    value = customer, onValueChange = { customer = it },
+                    label = { Text("customer（授权码）") }, singleLine = true,
+                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors()
+                )
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = key, onValueChange = { key = it },
+                    label = { Text("key（密钥）") }, singleLine = true,
+                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors()
+                )
+                Spacer(Modifier.height(16.dp))
+                Text("获取流程", color = TextPrimary, fontWeight = FontWeight.Bold, fontSize = 14.sp)
+                Spacer(Modifier.height(8.dp))
+                val steps = listOf(
+                    "1. 打开快递100开放平台：https://api.kuaidi100.com/",
+                    "2. 注册账号并登录（个人即可，免费额度每天 100 单足够用）",
+                    "3. 进入「管理中心」→「产品管理」→ 找到「实时查询」（企业版），点「申请开通」",
+                    "4. 开通后进入「我的账号」页面，找到「customer」和「key」两串字符",
+                    "5. 复制粘贴到上面两个输入框，点保存"
+                )
+                steps.forEach { step ->
+                    Text(step, fontSize = 12.sp, color = TextSecondary, lineHeight = 18.sp)
+                    Spacer(Modifier.height(4.dp))
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(
+                onClick = {
+                    ExpressKeyStore.save(context, customer, key)
+                    Toast.makeText(context, "已保存", Toast.LENGTH_SHORT).show()
+                    onDismiss()
+                },
+                enabled = customer.isNotBlank() && key.isNotBlank()
+            ) {
+                Text("保存", color = AccentBlue, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) } }
+    )
+}
+
 @Composable
 private fun PasteImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
     val context = LocalContext.current
@@ -382,63 +541,6 @@ private fun AddManualDialog(onDismiss: () -> Unit, onAdd: (String, String, Strin
             TextButton(onClick = { if (code.isNotBlank()) onAdd(code.trim(), station.trim(), carrier.trim()) },
                 enabled = code.isNotBlank()) {
                 Text("添加", color = AccentBlue, fontWeight = FontWeight.Bold)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) } }
-    )
-}
-
-@OptIn(ExperimentalMaterial3Api::class)
-@Composable
-private fun SearchDialog(loading: Boolean, onDismiss: () -> Unit, onQuery: (String, String?, String) -> Unit) {
-    var text by remember { mutableStateOf("") }
-    var expanded by remember { mutableStateOf(false) }
-    var selectedCom by remember { mutableStateOf<Pair<String, String>?>(null) }
-    var phone by remember { mutableStateOf("") }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        containerColor = CardDark,
-        title = { Text("查询快递", color = TextPrimary, fontWeight = FontWeight.Bold) },
-        text = {
-            Column {
-                OutlinedTextField(value = text, onValueChange = { text = it },
-                    label = { Text("输入快递单号") }, singleLine = true,
-                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
-                Spacer(Modifier.height(12.dp))
-                ExposedDropdownMenuBox(expanded = expanded, onExpandedChange = { expanded = it }) {
-                    OutlinedTextField(
-                        value = selectedCom?.second ?: "自动识别（可选）",
-                        onValueChange = {}, readOnly = true,
-                        label = { Text("快递公司") },
-                        trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
-                        modifier = Modifier.menuAnchor().fillMaxWidth(),
-                        shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
-                    ExposedDropdownMenu(expanded = expanded, onDismissRequest = { expanded = false },
-                        containerColor = CardDark) {
-                        COM_LIST.forEach { item ->
-                            DropdownMenuItem(text = { Text(item.second, color = TextPrimary) },
-                                onClick = { selectedCom = item; expanded = false })
-                        }
-                    }
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedTextField(value = phone, onValueChange = { if (it.length <= 4) phone = it },
-                    label = { Text("手机后4位（顺丰/京东必填）") }, singleLine = true,
-                    shape = RoundedCornerShape(12.dp), colors = darkFieldColors())
-                if (loading) {
-                    Spacer(Modifier.height(12.dp))
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        CircularProgressIndicator(modifier = Modifier.size(16.dp), strokeWidth = 2.dp)
-                        Spacer(Modifier.width(8.dp))
-                        Text("查询中...", color = TextSecondary, fontSize = 13.sp)
-                    }
-                }
-            }
-        },
-        confirmButton = {
-            TextButton(onClick = { if (text.isNotBlank()) onQuery(text.trim(), selectedCom?.first, phone) },
-                enabled = text.isNotBlank() && !loading) {
-                Text("查询", color = AccentBlue, fontWeight = FontWeight.Bold)
             }
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) } }
