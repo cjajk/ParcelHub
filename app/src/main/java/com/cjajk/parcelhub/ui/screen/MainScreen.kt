@@ -47,6 +47,12 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.runtime.getValue
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.layout.positionInRoot
+import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalHapticFeedback
@@ -92,7 +98,7 @@ private fun defaultPlatforms(context: Context) = listOf(
 )
 
 private const val SP_ORDER = "platform_order"
-private const val SP_SIDE_HEIGHT = "side_bar_height"
+private const val SP_SIDE_OFFSET = "side_bar_offset"
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -123,7 +129,7 @@ fun MainScreen(vm: MainViewModel) {
 
     var verticalBar by remember { mutableStateOf(false) }
     val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
-    var sideHeightPx by remember { mutableIntStateOf(sp.getInt(SP_SIDE_HEIGHT, 0)) }
+    var sideOffsetPx by remember { mutableIntStateOf(sp.getInt(SP_SIDE_OFFSET, 0)) }
 
     val barAngle by animateFloatAsState(
         targetValue = if (verticalBar) 90f else 0f,
@@ -247,11 +253,11 @@ fun MainScreen(vm: MainViewModel) {
             ) {
                 VerticalBarStandalone(
                     onToggleVertical = { verticalBar = false },
-                    heightPx = sideHeightPx,
-                    onHeightChange = { sideHeightPx = it },
-                    onHeightCommit = { px ->
-                        sideHeightPx = px
-                        sp.edit().putInt(SP_SIDE_HEIGHT, px).apply()
+                    offsetPx = sideOffsetPx,
+                    onOffsetChange = { sideOffsetPx = it },
+                    onOffsetCommit = { px ->
+                        sideOffsetPx = px
+                        sp.edit().putInt(SP_SIDE_OFFSET, px).apply()
                     }
                 )
             }
@@ -538,12 +544,12 @@ private fun GlassBottomBar(onToggleVertical: () -> Unit) {
         }
         TransposeKey(
             vertical = false,
-            currentHeightPx = 0,
-            minPx = 0,
-            maxPx = 0,
+            offsetPx = 0,
+            minOffsetPx = 0,
+            maxOffsetPx = 0,
             onToggle = onToggleVertical,
-            onHeightChange = {},
-            onHeightCommit = {}
+            onOffsetChange = {},
+            onOffsetCommit = {}
         )
     }
 }
@@ -551,9 +557,9 @@ private fun GlassBottomBar(onToggleVertical: () -> Unit) {
 @Composable
 private fun VerticalBarStandalone(
     onToggleVertical: () -> Unit,
-    heightPx: Int,
-    onHeightChange: (Int) -> Unit,
-    onHeightCommit: (Int) -> Unit
+    offsetPx: Int,
+    onOffsetChange: (Int) -> Unit,
+    onOffsetCommit: (Int) -> Unit
 ) {
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
@@ -578,17 +584,18 @@ private fun VerticalBarStandalone(
 
     BoxWithConstraints {
         val maxPx = with(density) { maxHeight.roundToPx() }
-        val minContentPx = with(density) {
-            ((order.size * 44).dp + 36.dp + 20.dp).roundToPx()
-        }
-        val minPx = minOf(minContentPx, maxPx)
-        val effectiveHeight = heightPx.takeIf { it in minPx..maxPx }
-            ?: maxOf(maxPx / 2, minPx)
+        val fixedHeightPx = minOf(
+            with(density) { (itemH * order.size + 36.dp + 20.dp).roundToPx() },
+            maxPx
+        )
+        val limitPx = ((maxPx - fixedHeightPx) / 2).coerceAtLeast(0)
+        val clampedOffset = offsetPx.coerceIn(-limitPx, limitPx)
 
         Column(
             modifier = Modifier
+                .offset { IntOffset(0, clampedOffset) }
                 .width(64.dp)
-                .height(with(density) { effectiveHeight.toDp() })
+                .height(with(density) { fixedHeightPx.toDp() })
                 .clip(RoundedCornerShape(32.dp))
                 .background(BarDark.copy(alpha = 0.9f))
                 .border(1.dp, BorderGray, RoundedCornerShape(32.dp))
@@ -629,12 +636,12 @@ private fun VerticalBarStandalone(
             }
             TransposeKey(
                 vertical = true,
-                currentHeightPx = effectiveHeight,
-                minPx = minPx,
-                maxPx = maxPx,
+                offsetPx = clampedOffset,
+                minOffsetPx = -limitPx,
+                maxOffsetPx = limitPx,
                 onToggle = onToggleVertical,
-                onHeightChange = onHeightChange,
-                onHeightCommit = onHeightCommit
+                onOffsetChange = onOffsetChange,
+                onOffsetCommit = onOffsetCommit
             )
         }
     }
@@ -643,48 +650,73 @@ private fun VerticalBarStandalone(
 @Composable
 private fun TransposeKey(
     vertical: Boolean,
-    currentHeightPx: Int,
-    minPx: Int,
-    maxPx: Int,
+    offsetPx: Int,
+    minOffsetPx: Int,
+    maxOffsetPx: Int,
     onToggle: () -> Unit,
-    onHeightChange: (Int) -> Unit,
-    onHeightCommit: (Int) -> Unit
+    onOffsetChange: (Int) -> Unit,
+    onOffsetCommit: (Int) -> Unit
 ) {
+    val haptic = LocalHapticFeedback.current
+    val curOffset by rememberUpdatedState(offsetPx)
+    val curMin by rememberUpdatedState(minOffsetPx)
+    val curMax by rememberUpdatedState(maxOffsetPx)
+    val curOnChange by rememberUpdatedState(onOffsetChange)
+    val curOnCommit by rememberUpdatedState(onOffsetCommit)
+
+    var coords by remember { mutableStateOf<LayoutCoordinates?>(null) }
     var dragActive by remember { mutableStateOf(false) }
-    var startHeight by remember { mutableIntStateOf(currentHeightPx) }
-    var acc by remember { mutableFloatStateOf(0f) }
+    var startOffset by remember { mutableIntStateOf(0) }
+    var startRootY by remember { mutableFloatStateOf(0f) }
+    var lastOffset by remember { mutableIntStateOf(0) }
+
+    val keyScale by animateFloatAsState(
+        targetValue = if (dragActive) 1.2f else 1f,
+        animationSpec = spring(stiffness = 600f),
+        label = "keyScale"
+    )
+
+    fun rootY(local: Offset): Float = (coords?.positionInRoot()?.y ?: 0f) + local.y
 
     Box(
         modifier = Modifier
             .size(36.dp)
+            .onGloballyPositioned { coords = it }
             .clip(CircleShape)
             .background(BorderGray)
             .clickable { onToggle() }
             .then(
                 if (vertical) Modifier.pointerInput(Unit) {
                     detectDragGesturesAfterLongPress(
-                        onDragStart = {
-                            startHeight = currentHeightPx
-                            acc = 0f
+                        onDragStart = { pos ->
+                            haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                            startOffset = curOffset
+                            lastOffset = curOffset
+                            startRootY = rootY(pos)
                             dragActive = true
                         },
-                        onDrag = { change, amount ->
+                        onDrag = { change, _ ->
                             change.consume()
-                            acc += amount.y
-                            val new = (startHeight + acc).roundToInt().coerceIn(minPx, maxPx)
-                            onHeightChange(new)
+                            val new = (startOffset + (rootY(change.position) - startRootY))
+                                .roundToInt()
+                                .coerceIn(curMin, curMax)
+                            lastOffset = new
+                            curOnChange(new)
                         },
                         onDragEnd = {
                             dragActive = false
-                            onHeightCommit((startHeight + acc).roundToInt().coerceIn(minPx, maxPx))
+                            curOnCommit(lastOffset)
                         },
-                        onDragCancel = { dragActive = false }
+                        onDragCancel = {
+                            dragActive = false
+                            curOnCommit(lastOffset)
+                        }
                     )
                 } else Modifier
             )
             .graphicsLayer {
-                scaleX = 1f
-                scaleY = 1f
+                scaleX = keyScale
+                scaleY = keyScale
             },
         contentAlignment = Alignment.Center
     ) {
