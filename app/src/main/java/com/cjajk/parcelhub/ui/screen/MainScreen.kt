@@ -1,5 +1,6 @@
 package com.cjajk.parcelhub.ui.screen
 
+import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
 import android.content.IntentFilter
@@ -29,6 +30,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
+import androidx.compose.material.icons.filled.Alarm
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Key
@@ -64,6 +66,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cjajk.parcelhub.data.PackageRecord
 import com.cjajk.parcelhub.data.SmsParser
+import com.cjajk.parcelhub.reminder.ReminderScheduler
 import com.cjajk.parcelhub.service.SmsReceiver
 import com.cjajk.parcelhub.ui.viewmodel.MainViewModel
 import com.cjajk.parcelhub.util.COM_LIST
@@ -85,6 +88,7 @@ val TextPrimary = Color(0xFFF2F2F7)
 val TextSecondary = Color(0xFF98989F)
 val CodeGreen = Color(0xFF30D158)
 val AccentBlue = Color(0xFF0A84FF)
+val WarnOrange = Color(0xFFFF9F0A)
 
 data class Platform(
     val id: String,
@@ -115,6 +119,7 @@ fun MainScreen(vm: MainViewModel) {
     var showAdd by remember { mutableStateOf(false) }
     var showPasteImport by remember { mutableStateOf(false) }
     var showKeyConfig by remember { mutableStateOf(false) }
+    var showDailyReminder by remember { mutableStateOf(false) }
     var queryResult by remember { mutableStateOf<ExpressResult?>(null) }
     var queryLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -188,6 +193,10 @@ fun MainScreen(vm: MainViewModel) {
                         Icon(Icons.Default.Search, contentDescription = "查询快递", tint = TextPrimary,
                             modifier = Modifier.size(28.dp))
                     }
+                    IconButton(onClick = { showDailyReminder = true }) {
+                        Icon(Icons.Default.Alarm, contentDescription = "每日提醒", tint = WarnOrange,
+                            modifier = Modifier.size(28.dp))
+                    }
                 }
 
                 TabRow(selectedTabIndex = tab, containerColor = Color.Transparent) {
@@ -218,9 +227,13 @@ fun MainScreen(vm: MainViewModel) {
                         item { EmptyHint(tab) }
                     }
                     items(list, key = { it.id }) { item ->
-                        PackageCard(item, onToggle = { vm.togglePickedUp(item) },
+                        PackageCard(
+                            item = item,
+                            onToggle = { vm.togglePickedUp(item) },
                             onDelete = { vm.delete(item) },
-                            modifier = Modifier.animateItem())
+                            onSetRemind = { ms -> vm.setRemindAt(item, ms) },
+                            modifier = Modifier.animateItem()
+                        )
                     }
                 }
             }
@@ -320,6 +333,79 @@ fun MainScreen(vm: MainViewModel) {
     if (showKeyConfig) {
         KeyConfigDialog(onDismiss = { showKeyConfig = false })
     }
+
+    if (showDailyReminder) {
+        DailyReminderDialog(onDismiss = { showDailyReminder = false })
+    }
+}
+
+@Composable
+private fun DailyReminderDialog(onDismiss: () -> Unit) {
+    val context = LocalContext.current
+    val current = remember { ReminderScheduler.getDailyTime(context) }
+    var hour by remember { mutableIntStateOf(current?.first ?: 18) }
+    var minute by remember { mutableIntStateOf(current?.second ?: 0) }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardDark,
+        title = { Text("每日统一提醒", color = TextPrimary, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text("每天到点提醒所有待取快递", fontSize = 12.sp, color = TextSecondary)
+                Spacer(Modifier.height(12.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Text("每天", color = TextPrimary, fontSize = 16.sp)
+                    Spacer(Modifier.width(12.dp))
+                    TimePickerField(hour, minute) { h, m -> hour = h; minute = m }
+                }
+                if (current != null) {
+                    Spacer(Modifier.height(12.dp))
+                    Text("当前已设置：每天 ${String.format("%02d:%02d", current.first, current.second)}",
+                        fontSize = 12.sp, color = CodeGreen)
+                }
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = {
+                ReminderScheduler.setDailyTime(context, hour, minute)
+                Toast.makeText(context, "已设置每日 ${String.format("%02d:%02d", hour, minute)} 提醒", Toast.LENGTH_SHORT).show()
+                onDismiss()
+            }) {
+                Text("保存", color = AccentBlue, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = {
+            Row {
+                if (current != null) {
+                    TextButton(onClick = {
+                        ReminderScheduler.clearDailyTime(context)
+                        Toast.makeText(context, "已关闭每日提醒", Toast.LENGTH_SHORT).show()
+                        onDismiss()
+                    }) { Text("关闭", color = Color(0xFFFF453A)) }
+                }
+                TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) }
+            }
+        }
+    )
+}
+
+@Composable
+private fun TimePickerField(hour: Int, minute: Int, onChange: (Int, Int) -> Unit) {
+    val context = LocalContext.current
+    OutlinedButton(
+        onClick = {
+            TimePickerDialog(
+                context,
+                { _, h, m -> onChange(h, m) },
+                hour, minute, true
+            ).show()
+        },
+        shape = RoundedCornerShape(12.dp),
+        colors = OutlinedButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
+    ) {
+        Text(String.format("%02d:%02d", hour, minute), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -343,26 +429,25 @@ private fun SearchDialog(
         title = { Text("查询快递", color = TextPrimary, fontWeight = FontWeight.Bold) },
         text = {
             Column {
-                // 配置密钥状态行
                 Row(
                     verticalAlignment = Alignment.CenterVertically,
                     modifier = Modifier
                         .clip(RoundedCornerShape(8.dp))
-                        .background(if (configured) CodeGreen.copy(alpha = 0.1f) else Color(0xFFFF9F0A).copy(alpha = 0.1f))
+                        .background(if (configured) CodeGreen.copy(alpha = 0.1f) else WarnOrange.copy(alpha = 0.1f))
                         .clickable { onConfigKey() }
                         .padding(horizontal = 10.dp, vertical = 6.dp)
                 ) {
                     Icon(
                         Icons.Default.Key,
                         contentDescription = null,
-                        tint = if (configured) CodeGreen else Color(0xFFFF9F0A),
+                        tint = if (configured) CodeGreen else WarnOrange,
                         modifier = Modifier.size(14.dp)
                     )
-                    Spacer(Modifier.width(6.dp))
+                    Spacer(Modifier.width = 6.dp)
                     Text(
                         if (configured) "快递100密钥已配置 ✓" else "未配置快递100密钥，点此配置",
                         fontSize = 12.sp,
-                        color = if (configured) CodeGreen else Color(0xFFFF9F0A),
+                        color = if (configured) CodeGreen else WarnOrange,
                         modifier = Modifier.weight(1f)
                     )
                 }
@@ -570,11 +655,11 @@ private fun ExpressQueryCard(result: ExpressResult, onDismiss: () -> Unit, onSav
                 Box(modifier = Modifier.clip(RoundedCornerShape(8.dp))
                     .background(when (result.state) {
                         3 -> CodeGreen.copy(alpha = 0.15f)
-                        5 -> Color(0xFFFF9F0A).copy(alpha = 0.15f)
+                        5 -> WarnOrange.copy(alpha = 0.15f)
                         else -> AccentBlue.copy(alpha = 0.15f)
                     }).padding(horizontal = 10.dp, vertical = 4.dp)) {
                     Text(result.stateText, fontSize = 12.sp, fontWeight = FontWeight.Medium,
-                        color = when (result.state) { 3 -> CodeGreen; 5 -> Color(0xFFFF9F0A); else -> AccentBlue })
+                        color = when (result.state) { 3 -> CodeGreen; 5 -> WarnOrange; else -> AccentBlue })
                 }
             }
             Spacer(Modifier.height(8.dp))
@@ -924,7 +1009,13 @@ private fun ReorderableIcon(
 }
 
 @Composable
-private fun PackageCard(item: PackageRecord, onToggle: () -> Unit, onDelete: () -> Unit, modifier: Modifier = Modifier) {
+private fun PackageCard(
+    item: PackageRecord,
+    onToggle: () -> Unit,
+    onDelete: () -> Unit,
+    onSetRemind: (Long?) -> Unit,
+    modifier: Modifier = Modifier
+) {
     val context = LocalContext.current
     var showDeleteDialog by remember { mutableStateOf(false) }
     Card(
@@ -965,6 +1056,47 @@ private fun PackageCard(item: PackageRecord, onToggle: () -> Unit, onDelete: () 
                     }
                     Text(formatTime(item.timestamp), style = MaterialTheme.typography.bodySmall, color = TextSecondary)
                 }
+                if (item.remindAt != null && !item.pickedUp) {
+                    Spacer(Modifier.height(4.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Alarm, contentDescription = null,
+                            tint = WarnOrange, modifier = Modifier.size(12.dp))
+                        Spacer(Modifier.width(4.dp))
+                        Text("提醒 ${SimpleDateFormat("MM-dd HH:mm", Locale.getDefault()).format(Date(item.remindAt))}",
+                            fontSize = 11.sp, color = WarnOrange)
+                    }
+                }
+            }
+            IconButton(onClick = {
+                // 点闹钟：已设提醒就取消，没设就弹时间选择器
+                if (item.remindAt != null) {
+                    onSetRemind(null)
+                    Toast.makeText(context, "已取消提醒", Toast.LENGTH_SHORT).show()
+                } else {
+                    val cal = java.util.Calendar.getInstance().apply {
+                        add(java.util.Calendar.HOUR_OF_DAY, 1)
+                        set(java.util.Calendar.MINUTE, 0)
+                    }
+                    TimePickerDialog(
+                        context,
+                        { _, h, m ->
+                            cal.set(java.util.Calendar.HOUR_OF_DAY, h)
+                            cal.set(java.util.Calendar.MINUTE, m)
+                            onSetRemind(cal.timeInMillis)
+                            Toast.makeText(context, "已设提醒 ${String.format("%02d:%02d", h, m)}", Toast.LENGTH_SHORT).show()
+                        },
+                        cal.get(java.util.Calendar.HOUR_OF_DAY),
+                        cal.get(java.util.Calendar.MINUTE),
+                        true
+                    ).show()
+                }
+            }) {
+                Icon(
+                    Icons.Default.Alarm,
+                    contentDescription = "设置提醒",
+                    tint = if (item.remindAt != null) WarnOrange else TextSecondary,
+                    modifier = Modifier.size(20.dp)
+                )
             }
             FilledTonalButton(onClick = onToggle, shape = RoundedCornerShape(14.dp)) {
                 Text(if (item.pickedUp) "撤销" else "已取")
