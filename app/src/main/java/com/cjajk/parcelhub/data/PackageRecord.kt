@@ -9,7 +9,8 @@ data class PackageRecord(
     val carrier: String = "",
     val timestamp: Long = System.currentTimeMillis(),
     var pickedUp: Boolean = false,
-    val rawSms: String = ""
+    val rawSms: String = "",
+    val remindAt: Long? = null
 ) {
     fun toJson(): JSONObject = JSONObject().apply {
         put("id", id)
@@ -19,6 +20,7 @@ data class PackageRecord(
         put("timestamp", timestamp)
         put("pickedUp", pickedUp)
         put("rawSms", rawSms)
+        if (remindAt != null) put("remindAt", remindAt)
     }
 
     companion object {
@@ -29,7 +31,8 @@ data class PackageRecord(
             carrier = o.optString("carrier", ""),
             timestamp = o.getLong("timestamp"),
             pickedUp = o.optBoolean("pickedUp", false),
-            rawSms = o.optString("rawSms", "")
+            rawSms = o.optString("rawSms", ""),
+            remindAt = if (o.isNull("remindAt")) null else o.optLong("remindAt")
         )
     }
 }
