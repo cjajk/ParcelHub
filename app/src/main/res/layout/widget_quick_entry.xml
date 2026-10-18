@@ -4,7 +4,7 @@
     android:layout_height="match_parent"
     android:orientation="horizontal"
     android:background="#E61C1C1E"
-    android:padding="8dp"
+    android:padding="10dp"
     android:gravity="center"
     android:weightSum="5">
 
@@ -18,7 +18,7 @@
         android:textColor="#1677FF"
         android:textSize="20sp"
         android:textStyle="bold"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:background="@drawable/widget_btn_cainiao"
         android:layout_margin="4dp"/>
 
     <TextView
@@ -31,7 +31,7 @@
         android:textColor="#FF6600"
         android:textSize="20sp"
         android:textStyle="bold"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:background="@drawable/widget_btn_taobao"
         android:layout_margin="4dp"/>
 
     <TextView
@@ -44,7 +44,7 @@
         android:textColor="#E02020"
         android:textSize="20sp"
         android:textStyle="bold"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:background="@drawable/widget_btn_pdd"
         android:layout_margin="4dp"/>
 
     <TextView
@@ -57,7 +57,7 @@
         android:textColor="#8C8C8C"
         android:textSize="20sp"
         android:textStyle="bold"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:background="@drawable/widget_btn_sf"
         android:layout_margin="4dp"/>
 
     <TextView
@@ -70,7 +70,7 @@
         android:textColor="#B45309"
         android:textSize="20sp"
         android:textStyle="bold"
-        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:background="@drawable/widget_btn_jd"
         android:layout_margin="4dp"/>
 
 </LinearLayout>
