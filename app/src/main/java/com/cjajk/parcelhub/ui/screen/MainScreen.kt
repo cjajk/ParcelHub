@@ -393,18 +393,16 @@ private fun DailyReminderDialog(onDismiss: () -> Unit) {
 @Composable
 private fun TimePickerField(hour: Int, minute: Int, onChange: (Int, Int) -> Unit) {
     val context = LocalContext.current
-    OutlinedButton(
+    TextButton(
         onClick = {
             TimePickerDialog(
                 context,
                 { _, h, m -> onChange(h, m) },
                 hour, minute, true
             ).show()
-        },
-        shape = RoundedCornerShape(12.dp),
-        colors = OutlinedButtonDefaults.outlinedButtonColors(contentColor = TextPrimary)
+        }
     ) {
-        Text(String.format("%02d:%02d", hour, minute), fontSize = 18.sp, fontWeight = FontWeight.Bold)
+        Text(String.format("%02d:%02d", hour, minute), fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
     }
 }
 
@@ -443,7 +441,7 @@ private fun SearchDialog(
                         tint = if (configured) CodeGreen else WarnOrange,
                         modifier = Modifier.size(14.dp)
                     )
-                    Spacer(Modifier.width = 6.dp)
+                    Spacer(Modifier.width(6.dp))
                     Text(
                         if (configured) "快递100密钥已配置 ✓" else "未配置快递100密钥，点此配置",
                         fontSize = 12.sp,
@@ -1068,7 +1066,6 @@ private fun PackageCard(
                 }
             }
             IconButton(onClick = {
-                // 点闹钟：已设提醒就取消，没设就弹时间选择器
                 if (item.remindAt != null) {
                     onSetRemind(null)
                     Toast.makeText(context, "已取消提醒", Toast.LENGTH_SHORT).show()
