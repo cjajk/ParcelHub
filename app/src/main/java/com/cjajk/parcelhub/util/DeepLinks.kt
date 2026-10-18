@@ -1,6 +1,6 @@
 package com.cjajk.parcelhub.util
 
-import android.content.ActivityNotFoundException
+import android.app.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
@@ -72,22 +72,17 @@ object DeepLinks {
         fallbackToPackage(context, pkg, "拼多多")
     }
 
-    /** 菜鸟身份码 */
+    /** 菜鸟身份码（直接跳支付宝内菜鸟） */
     fun openAlipayCainiao(context: Context) {
-        val pkg = "com.cainiao.wireless"
+        val alipayPkg = "com.eg.android.AlipayGphone"
         val web = "https://market.m.taobao.com/app/cn-yz/multi-activity/authCode.html?bizEntry=ALIPAY_GUOGUO"
-        val uris = listOf(
-            "cainiao://desktop/station_code"
-        )
-        for (u in uris) {
-            if (tryOpen(context, u, pkg)) return
-        }
-        if (tryOpenInstalledApp(context, pkg)) {
-            Toast.makeText(context, "菜鸟身份码直达未成功，已打开菜鸟 App，请在 App 内查看", Toast.LENGTH_LONG).show()
+        // 优先走支付宝内打开菜鸟身份码，不跳独立菜鸟App
+        if (tryOpen(context, web, alipayPkg)) return
+        if (tryOpenInstalledApp(context, alipayPkg)) {
+            Toast.makeText(context, "已打开支付宝，请在小程序中找到菜鸟身份码", Toast.LENGTH_LONG).show()
             return
         }
-        if (tryOpen(context, web, null)) return
-        Toast.makeText(context, "未安装菜鸟 App", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "未安装支付宝", Toast.LENGTH_SHORT).show()
     }
 
     /** 顺丰 */
