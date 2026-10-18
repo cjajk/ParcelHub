@@ -1,6 +1,6 @@
 package com.cjajk.parcelhub.util
 
-import android.app.ActivityNotFoundException
+import android.content.ActivityNotFoundException
 import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
