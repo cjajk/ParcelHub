@@ -40,14 +40,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Search
-import androidx.compose.material.icons.filled.ShoppingBag
-import androidx.compose.material.icons.filled.ShoppingCart
-import androidx.compose.material.icons.filled.LocalShipping
-import androidx.compose.material.icons.filled.Store
 import androidx.compose.material.icons.filled.SwapHoriz
 import androidx.compose.material.icons.filled.SwapVert
-import androidx.compose.material.icons.outlined.MailOutline
 import androidx.compose.material3.*
+import androidx.compose.foundation.Image
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
 import androidx.compose.runtime.*
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.ui.Alignment
@@ -63,6 +61,7 @@ import androidx.compose.ui.platform.LocalHapticFeedback
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.cjajk.parcelhub.R
 import com.cjajk.parcelhub.data.PackageRecord
 import com.cjajk.parcelhub.service.SmsReceiver
 import com.cjajk.parcelhub.ui.viewmodel.MainViewModel
@@ -89,16 +88,17 @@ data class Platform(
     val id: String,
     val packages: List<String>,
     val label: String,
-    val icon: androidx.compose.ui.graphics.vector.ImageVector,
+    val iconRes: Int,
+    val ringColor: Color,
     val onClick: (Context) -> Unit
 )
 
 private fun defaultPlatforms(context: Context) = listOf(
-    Platform("taobao", listOf("com.taobao.taobao"), "淘宝", Icons.Default.ShoppingBag) { DeepLinks.openTaobaoIdentity(it) },
-    Platform("pdd", listOf("com.xunmeng.pinduoduo"), "拼多多", Icons.Default.ShoppingCart) { DeepLinks.openPddPickup(it) },
-    Platform("cainiao", listOf("com.eg.android.AlipayGphone"), "菜鸟", Icons.Default.LocalShipping) { DeepLinks.openAlipayCainiao(it) },
-    Platform("sf", listOf("com.sf.activity", "com.sfexpress.activity"), "顺丰", Icons.Outlined.MailOutline) { DeepLinks.openSf(it) },
-    Platform("jd", listOf("com.jingdong.app.mall"), "京东", Icons.Default.Store) { DeepLinks.openJd(it) }
+    Platform("taobao", listOf("com.taobao.taobao"), "淘宝", R.drawable.ic_platform_taobao, Color(0xFFFF6A00)) { DeepLinks.openTaobaoIdentity(it) },
+    Platform("pdd", listOf("com.xunmeng.pinduoduo"), "拼多多", R.drawable.ic_platform_pdd, Color(0xFFE62E2E)) { DeepLinks.openPddPickup(it) },
+    Platform("cainiao", listOf("com.eg.android.AlipayGphone"), "菜鸟", R.drawable.ic_platform_cainiao, Color(0xFF3C8CF0)) { DeepLinks.openAlipayCainiao(it) },
+    Platform("sf", listOf("com.sf.activity", "com.sfexpress.activity"), "顺丰", R.drawable.ic_platform_sf, Color(0xFFB8BCC4)) { DeepLinks.openSf(it) },
+    Platform("jd", listOf("com.jingdong.app.mall"), "京东", R.drawable.ic_platform_jd, Color(0xFFC8452E)) { DeepLinks.openJd(it) }
 )
 
 private const val SP_ORDER = "platform_order"
@@ -135,12 +135,12 @@ fun MainScreen(vm: MainViewModel) {
     var sideHeightPx by remember { mutableIntStateOf(sp.getInt(SP_SIDE_HEIGHT, 0)) }
 
     val bottomPad by animateDpAsState(
-        targetValue = if (verticalBar) 0.dp else 84.dp,
+        targetValue = if (verticalBar) 0.dp else 100.dp,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "bottomPad"
     )
     val endPad by animateDpAsState(
-        targetValue = if (verticalBar) 64.dp else 0.dp,
+        targetValue = if (verticalBar) 68.dp else 0.dp,
         animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
         label = "endPad"
     )
@@ -688,12 +688,20 @@ private fun ReorderableIcon(
                 shadowElevation = if (dragging) 14f else 0f
             }
     ) {
-        Icon(
-            imageVector = platform.icon,
-            contentDescription = platform.label,
-            tint = TextPrimary,
-            modifier = Modifier.size(24.dp)
-        )
+        Box(
+            modifier = Modifier
+                .size(32.dp)
+                .clip(CircleShape)
+                .background(BorderGray)
+                .border(1.5.dp, platform.ringColor.copy(alpha = if (dragging) 0.95f else 0.55f), CircleShape)
+        ) {
+            Image(
+                painter = painterResource(platform.iconRes),
+                contentDescription = platform.label,
+                contentScale = ContentScale.Crop,
+                modifier = Modifier.fillMaxSize()
+            )
+        }
         Spacer(Modifier.height(4.dp))
         Text(platform.label, fontSize = 10.sp, color = TextSecondary)
     }
