@@ -72,16 +72,15 @@ object DeepLinks {
         fallbackToPackage(context, pkg, "拼多多")
     }
 
-    /** 菜鸟身份码（直接跳支付宝内菜鸟） */
+    /** 菜鸟身份码（直接跳菜鸟裹裹取件码页） */
     fun openAlipayCainiao(context: Context) {
-        val alipayPkg = "com.eg.android.AlipayGphone"
-        val alipayScheme = "alipays://platformapi/startapp?appId=20000067&page=pages/index/index"
-        if (tryOpen(context, alipayScheme, alipayPkg)) return
-        if (tryOpenInstalledApp(context, alipayPkg)) {
-            Toast.makeText(context, "已打开支付宝，请在小程序中搜索菜鸟身份码", Toast.LENGTH_LONG).show()
+        val pkg = "com.cainiao.wireless"
+        if (tryOpen(context, "cainiao://desktop/station_code", pkg)) return
+        if (tryOpenInstalledApp(context, pkg)) {
+            Toast.makeText(context, "已打开菜鸟裹裹，请在App内查看身份码", Toast.LENGTH_LONG).show()
             return
         }
-        Toast.makeText(context, "未安装支付宝", Toast.LENGTH_SHORT).show()
+        Toast.makeText(context, "未安装菜鸟裹裹App", Toast.LENGTH_SHORT).show()
     }
 
     /** 顺丰 */
