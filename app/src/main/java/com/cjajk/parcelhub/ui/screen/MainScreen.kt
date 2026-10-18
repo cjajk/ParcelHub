@@ -228,12 +228,15 @@ fun MainScreen(vm: MainViewModel) {
                         ) {
                             if (queryResult != null) {
                                 item(key = "express_query") {
-                                    ExpressQueryCard(queryResult!!, onDismiss = { queryResult = null },
-                                        onSave = {
-                                            vm.addManual(queryResult!!.nu, "", queryResult!!.com)
+                                    ExpressQueryCard(
+                                        result = queryResult!!,
+                                        onDismiss = { queryResult = null },
+                                        onSave = { customCode, customStation ->
+                                            vm.addManual(customCode, customStation, queryResult!!.com)
                                             Toast.makeText(context, "已保存到列表", Toast.LENGTH_SHORT).show()
                                             queryResult = null
-                                        })
+                                        }
+                                    )
                                 }
                             }
                             if (list.isEmpty() && queryResult == null) {
@@ -757,8 +760,19 @@ private fun darkFieldColors() = OutlinedTextFieldDefaults.colors(
     cursorColor = AccentBlue
 )
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
-private fun ExpressQueryCard(result: ExpressResult, onDismiss: () -> Unit, onSave: () -> Unit) {
+private fun ExpressQueryCard(
+    result: ExpressResult,
+    onDismiss: () -> Unit,
+    onSave: (String, String) -> Unit
+) {
+    // 自动从最新轨迹提取取件码和驿站名
+    val latestTrace = result.traces.firstOrNull()?.context.orEmpty()
+    val parsed = remember(result.nu, latestTrace) { SmsParser.parse(null, latestTrace) }
+    var code by remember(result.nu) { mutableStateOf(parsed?.code ?: result.nu) }
+    var station by remember(result.nu) { mutableStateOf(parsed?.station ?: extractStationFromTrace(latestTrace, result.com)) }
+
     Card(
         modifier = Modifier.fillMaxWidth(),
         shape = RoundedCornerShape(20.dp),
@@ -800,14 +814,47 @@ private fun ExpressQueryCard(result: ExpressResult, onDismiss: () -> Unit, onSav
                         fontSize = 14.sp, color = AccentBlue, fontWeight = FontWeight.Medium)
                 }
             }
+            Spacer(Modifier.height(16.dp))
+            // 可编辑的取件码和驿站
+            Text("保存为：", fontSize = 12.sp, color = TextSecondary)
+            Spacer(Modifier.height(6.dp))
+            OutlinedTextField(
+                value = code, onValueChange = { code = it },
+                label = { Text("取件码") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp), colors = darkFieldColors()
+            )
+            Spacer(Modifier.height(8.dp))
+            OutlinedTextField(
+                value = station, onValueChange = { station = it },
+                label = { Text("驿站/取件地址") }, singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(12.dp), colors = darkFieldColors()
+            )
             Spacer(Modifier.height(8.dp))
             Row {
-                TextButton(onClick = onSave) { Text("保存到列表", color = AccentBlue, fontSize = 13.sp) }
+                TextButton(onClick = {
+                    if (code.isNotBlank()) onSave(code.trim(), station.trim())
+                }) { Text("保存到列表", color = AccentBlue, fontWeight = FontWeight.Bold, fontSize = 14.sp) }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onDismiss) { Text("关闭", color = TextSecondary, fontSize = 13.sp) }
             }
         }
     }
+}
+
+/** 从物流轨迹里提取【】中的驿站名，提取不到就用快递公司名兜底 */
+private fun extractStationFromTrace(trace: String, fallback: String): String {
+    // 匹配【...】中的内容
+    val bracketRegex = Regex("【([^】]+)】")
+    val matches = bracketRegex.findAll(trace).map { it.groupValues[1] }.toList()
+    // 优先取含"驿站/代收/服务点/柜/学院/食堂"等关键词的
+    val keywords = listOf("驿站", "代收", "服务点", "快递柜", "学院", "食堂", "北侧", "南侧", "校区", "邮政")
+    for (m in matches) {
+        if (keywords.any { m.contains(it) }) return m
+    }
+    // 其次取最后一个【】内容
+    return matches.lastOrNull() ?: fallback
 }
 
 @Composable
@@ -1189,7 +1236,6 @@ private fun PackageCard(
                     onSetRemind(null)
                     Toast.makeText(context, "已取消提醒", Toast.LENGTH_SHORT).show()
                 } else {
-                    // 先选日期（默认今天），再选时间（默认下一小时）
                     val now = Calendar.getInstance()
                     val cal = Calendar.getInstance().apply {
                         timeInMillis = now.timeInMillis
@@ -1221,7 +1267,6 @@ private fun PackageCard(
                         cal.get(Calendar.MONTH),
                         cal.get(Calendar.DAY_OF_MONTH)
                     ).apply {
-                        // 不允许选过去的日期
                         datePicker.minDate = now.timeInMillis
                     }.show()
                 }
