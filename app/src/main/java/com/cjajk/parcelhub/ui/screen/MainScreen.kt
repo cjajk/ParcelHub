@@ -60,6 +60,7 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.cjajk.parcelhub.data.PackageRecord
+import com.cjajk.parcelhub.data.SmsParser
 import com.cjajk.parcelhub.service.SmsReceiver
 import com.cjajk.parcelhub.ui.viewmodel.MainViewModel
 import com.cjajk.parcelhub.util.COM_LIST
@@ -108,7 +109,7 @@ fun MainScreen(vm: MainViewModel) {
     var tab by remember { mutableIntStateOf(0) }
     var showSearch by remember { mutableStateOf(false) }
     var showAdd by remember { mutableStateOf(false) }
-    var parsedSms by remember { mutableStateOf<ParsedSms?>(null) }
+    var showPasteImport by remember { mutableStateOf(false) }
     var queryResult by remember { mutableStateOf<ExpressResult?>(null) }
     var queryLoading by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
@@ -170,17 +171,8 @@ fun MainScreen(vm: MainViewModel) {
                         color = TextPrimary,
                         modifier = Modifier.weight(1f)
                     )
-                    IconButton(onClick = {
-                        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
-                        val text = cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty()
-                        val parsed = parseSms(text)
-                        if (parsed != null) {
-                            parsedSms = parsed
-                        } else {
-                            Toast.makeText(context, "剪贴板里没解析到取件码", Toast.LENGTH_SHORT).show()
-                        }
-                    }) {
-                        Icon(Icons.Default.ContentPaste, contentDescription = "导入短信", tint = TextPrimary,
+                    IconButton(onClick = { showPasteImport = true }) {
+                        Icon(Icons.Default.ContentPaste, contentDescription = "粘贴导入", tint = TextPrimary,
                             modifier = Modifier.size(28.dp))
                     }
                     IconButton(onClick = { showAdd = true }) {
@@ -296,37 +288,66 @@ fun MainScreen(vm: MainViewModel) {
         )
     }
 
-    parsedSms?.let { parsed ->
-        AlertDialog(
-            onDismissRequest = { parsedSms = null },
-            containerColor = CardDark,
-            title = { Text("解析到取件码", color = TextPrimary, fontWeight = FontWeight.Bold) },
-            text = {
-                Column {
-                    Text("取件码", color = TextSecondary, fontSize = 12.sp)
-                    Text(parsed.code, fontSize = 28.sp, fontWeight = FontWeight.Bold, color = CodeGreen)
-                    Spacer(Modifier.height(12.dp))
-                    Text("驿站/地址", color = TextSecondary, fontSize = 12.sp)
-                    Text(parsed.station.ifBlank { "未识别" }, color = TextPrimary)
-                    Spacer(Modifier.height(12.dp))
-                    Text("快递公司", color = TextSecondary, fontSize = 12.sp)
-                    Text(parsed.carrier.ifBlank { "未识别" }, color = TextPrimary)
+    if (showPasteImport) {
+        PasteImportDialog(
+            onDismiss = { showPasteImport = false },
+            onImport = { raw ->
+                showPasteImport = false
+                // 按换行分割成多条短信，逐条解析
+                val blocks = raw.split(Regex("\\n\\s*\\n|\\n"))
+                    .map { it.trim() }
+                    .filter { it.isNotBlank() }
+                var count = 0
+                blocks.forEach { block ->
+                    val record = SmsParser.parse(null, block)
+                    if (record != null) {
+                        vm.addManual(record.code, record.station, record.carrier)
+                        count++
+                    }
                 }
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    vm.addManual(parsed.code, parsed.station, parsed.carrier)
-                    Toast.makeText(context, "已添加", Toast.LENGTH_SHORT).show()
-                    parsedSms = null
-                }) {
-                    Text("添加", color = AccentBlue, fontWeight = FontWeight.Bold)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = { parsedSms = null }) { Text("取消", color = TextSecondary) }
+                Toast.makeText(context, "已导入 $count 条", Toast.LENGTH_SHORT).show()
             }
         )
     }
+}
+
+@OptIn(ExperimentalMaterial3Api::class)
+@Composable
+private fun PasteImportDialog(onDismiss: () -> Unit, onImport: (String) -> Unit) {
+    val context = LocalContext.current
+    var text by remember {
+        val cm = context.getSystemService(Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+        mutableStateOf(cm.primaryClip?.getItemAt(0)?.text?.toString().orEmpty())
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        containerColor = CardDark,
+        title = { Text("粘贴短信导入", color = TextPrimary, fontWeight = FontWeight.Bold) },
+        text = {
+            Column {
+                Text("把收到的取件短信粘贴在下面，支持多条一起粘贴",
+                    fontSize = 12.sp, color = TextSecondary)
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(
+                    value = text,
+                    onValueChange = { text = it },
+                    placeholder = { Text("【京东快递】取件码C5-1227...", color = TextSecondary) },
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .height(220.dp),
+                    shape = RoundedCornerShape(12.dp),
+                    colors = darkFieldColors()
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(onClick = { if (text.isNotBlank()) onImport(text) },
+                enabled = text.isNotBlank()) {
+                Text("解析并导入", color = AccentBlue, fontWeight = FontWeight.Bold)
+            }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("取消", color = TextSecondary) } }
+    )
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -882,54 +903,6 @@ private fun EmptyHint(tab: Int) {
             )
         }
     }
-}
-
-private data class ParsedSms(val code: String, val station: String, val carrier: String)
-
-private fun parseSms(text: String): ParsedSms? {
-    if (text.isBlank()) return null
-
-    var carrier = ""
-    val bracket = Regex("【(.+?)】").find(text)
-    if (bracket != null) {
-        carrier = bracket.groupValues[1]
-    } else {
-        val known = listOf(
-            "京东" to "京东快递", "顺丰" to "顺丰速运", "菜鸟" to "菜鸟驿站",
-            "中通" to "中通快递", "圆通" to "圆通速递", "韵达" to "韵达快递",
-            "申通" to "申通快递", "极兔" to "极兔速递", "邮政" to "邮政包裹",
-            "EMS" to "EMS", "丹鸟" to "丹鸟"
-        )
-        for ((k, v) in known) {
-            if (text.contains(k, ignoreCase = true)) { carrier = v; break }
-        }
-    }
-
-    val codePatterns = listOf(
-        Regex("取件码[:：]?\\s*([A-Za-z]?\\d+-\\d+(?:-\\d+)?)"),
-        Regex("([A-Za-z]\\d+-\\d+(?:-\\d+)?)"),
-        Regex("(\\d+-\\d+-\\d+)"),
-        Regex("(\\d+-\\d+)")
-    )
-    var code = ""
-    for (p in codePatterns) {
-        val m = p.find(text)
-        if (m != null) { code = m.groupValues[1]; break }
-    }
-    if (code.isBlank()) return null
-
-    var station = ""
-    val addrPatterns = listOf(
-        Regex("地址[:：]\\s*(.+?)(?:[，。,\\n]|$)"),
-        Regex("(?:送达|到达|投放至|放在|存至)(.+?)(?:[，。,\\n]|$)"),
-        Regex("(.+?(?:驿站|服务站|快递柜|菜鸟柜|速递易|丰巢))")
-    )
-    for (p in addrPatterns) {
-        val m = p.find(text)
-        if (m != null) { station = m.groupValues[1].trim(); break }
-    }
-
-    return ParsedSms(code, station, carrier)
 }
 
 private fun formatTime(ts: Long): String {
