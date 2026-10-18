@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="horizontal"
+    android:background="#E61C1C1E"
+    android:padding="8dp"
+    android:gravity="center"
+    android:weightSum="5">
+
+    <TextView
+        android:id="@+id/widget_cainiao"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="菜"
+        android:textColor="#1677FF"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:layout_margin="4dp"/>
+
+    <TextView
+        android:id="@+id/widget_taobao"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="淘"
+        android:textColor="#FF6600"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:layout_margin="4dp"/>
+
+    <TextView
+        android:id="@+id/widget_pdd"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="拼"
+        android:textColor="#E02020"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:layout_margin="4dp"/>
+
+    <TextView
+        android:id="@+id/widget_sf"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="顺"
+        android:textColor="#8C8C8C"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:layout_margin="4dp"/>
+
+    <TextView
+        android:id="@+id/widget_jd"
+        android:layout_width="0dp"
+        android:layout_height="match_parent"
+        android:layout_weight="1"
+        android:gravity="center"
+        android:text="京"
+        android:textColor="#B45309"
+        android:textSize="20sp"
+        android:textStyle="bold"
+        android:background="?android:attr/selectableItemBackgroundBorderless"
+        android:layout_margin="4dp"/>
+
+</LinearLayout>
