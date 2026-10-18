@@ -12,11 +12,13 @@ import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.core.content.ContextCompat
 import androidx.lifecycle.viewmodel.compose.viewModel
+import com.cjajk.parcelhub.data.PackageRecord
 import com.cjajk.parcelhub.data.PackageStore
 import com.cjajk.parcelhub.data.SmsParser
 import com.cjajk.parcelhub.ui.screen.MainScreen
 import com.cjajk.parcelhub.ui.theme.ParcelHubTheme
 import com.cjajk.parcelhub.ui.viewmodel.MainViewModel
+import com.cjajk.parcelhub.widget.PickupWidget
 import kotlin.concurrent.thread
 
 class MainActivity : ComponentActivity() {
@@ -61,7 +63,7 @@ class MainActivity : ComponentActivity() {
         val sp = getSharedPreferences("parcel_hub", Context.MODE_PRIVATE)
         if (sp.getBoolean("sms_backscanned", false)) return
         thread {
-            var imported = 0
+            val parsed = mutableListOf<PackageRecord>()
             try {
                 val weekAgo = System.currentTimeMillis() - 7L * 24 * 3600 * 1000
                 val cursor = contentResolver.query(
@@ -78,18 +80,19 @@ class MainActivity : ComponentActivity() {
                         val sender = if (addrIdx >= 0) c.getString(addrIdx) ?: "" else ""
                         val body = if (bodyIdx >= 0) c.getString(bodyIdx) ?: "" else ""
                         if (body.isBlank()) continue
-                        val record = SmsParser.parse(sender, body) ?: continue
-                        PackageStore(this@MainActivity).add(record)
-                        imported++
+                        SmsParser.parse(sender, body)?.let { parsed.add(it) }
                     }
                 }
             } catch (_: Exception) {
             } finally {
                 sp.edit().putBoolean("sms_backscanned", true).apply()
             }
-            if (imported > 0) {
+            if (parsed.isNotEmpty()) {
+                // 批量写入，只触发一次磁盘写
+                PackageStore(this@MainActivity).addAll(parsed)
+                PickupWidget.refresh(this@MainActivity)
                 runOnUiThread {
-                    Toast.makeText(this, "已回扫最近7天短信，导入 $imported 条", Toast.LENGTH_LONG).show()
+                    Toast.makeText(this, "已回扫最近7天短信，导入 ${parsed.size} 条", Toast.LENGTH_LONG).show()
                 }
             }
         }

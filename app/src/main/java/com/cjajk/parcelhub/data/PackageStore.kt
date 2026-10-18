@@ -7,48 +7,65 @@ class PackageStore(context: Context) {
     private val sp = context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE)
     private val lock = Any()
 
-    fun getAll(): MutableList<PackageRecord> = synchronized(lock) {
+    // 内存缓存：避免每次操作都从 SP 读全量 JSON
+    @Volatile
+    private var cache: MutableList<PackageRecord>? = null
+
+    private fun load(): MutableList<PackageRecord> {
+        cache?.let { return it }
         val raw = sp.getString("packages", "[]") ?: "[]"
         val arr = JSONArray(raw)
         val list = mutableListOf<PackageRecord>()
         for (i in 0 until arr.length()) {
             list.add(PackageRecord.fromJson(arr.getJSONObject(i)))
         }
-        list
+        cache = list
+        return list
     }
 
-    private fun save(list: List<PackageRecord>) = synchronized(lock) {
+    private fun persist() {
+        val list = cache ?: return
         val arr = JSONArray()
         list.forEach { arr.put(it.toJson()) }
         sp.edit().putString("packages", arr.toString()).apply()
     }
 
+    fun getAll(): MutableList<PackageRecord> = synchronized(lock) {
+        load().toMutableList()
+    }
+
     fun add(record: PackageRecord) = synchronized(lock) {
-        val list = getAll()
-        // 只和"未取走"的同码同站记录去重；已取走的同码记录不吞新包裹
-        val dup = list.any { !it.pickedUp && it.code == record.code && it.station == record.station }
-        if (dup) return@synchronized
-        // id 碰撞保护：Receiver 和 ViewModel 同时 new 可能撞 currentTimeMillis
-        var r = record
-        while (list.any { it.id == r.id }) {
-            r = r.copy(id = r.id + 1)
+        addAll(listOf(record))
+    }
+
+    /** 批量加入：只写一次磁盘 */
+    fun addAll(records: List<PackageRecord>) = synchronized(lock) {
+        val list = load()
+        var changed = false
+        records.forEach { record ->
+            val dup = list.any { !it.pickedUp && it.code == record.code && it.station == record.station }
+            if (dup) return@forEach
+            var r = record
+            while (list.any { it.id == r.id }) {
+                r = r.copy(id = r.id + 1)
+            }
+            list.add(0, r)
+            changed = true
         }
-        list.add(0, r)
-        save(list)
+        if (changed) persist()
     }
 
     fun markPickedUp(id: Long, picked: Boolean) = synchronized(lock) {
-        val list = getAll()
+        val list = load()
         val idx = list.indexOfFirst { it.id == id }
         if (idx >= 0) {
             list[idx] = list[idx].copy(pickedUp = picked)
-            save(list)
+            persist()
         }
     }
 
     fun delete(id: Long) = synchronized(lock) {
-        val list = getAll()
-        list.removeAll { it.id == id }
-        save(list)
+        val list = load()
+        if (list.removeAll { it.id == id }) persist()
     }
 }
