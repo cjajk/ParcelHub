@@ -18,6 +18,7 @@ import com.cjajk.parcelhub.data.SmsParser
 import com.cjajk.parcelhub.ui.screen.MainScreen
 import com.cjajk.parcelhub.ui.theme.ParcelHubTheme
 import com.cjajk.parcelhub.ui.viewmodel.MainViewModel
+import com.cjajk.parcelhub.util.MascotIcons
 import com.cjajk.parcelhub.widget.PickupWidget
 import kotlin.concurrent.thread
 
@@ -33,6 +34,8 @@ class MainActivity : ComponentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        MascotIcons.init(this)
 
         val perms = mutableListOf(
             Manifest.permission.RECEIVE_SMS,
