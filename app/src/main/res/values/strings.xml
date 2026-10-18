@@ -1,4 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">快递聚合</string>
+    <string name="widget_description">一键打开各平台取件身份码</string>
 </resources>
