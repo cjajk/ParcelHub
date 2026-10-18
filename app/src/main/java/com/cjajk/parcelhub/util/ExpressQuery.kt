@@ -1,11 +1,13 @@
 package com.cjajk.parcelhub.util
 
+import com.cjajk.parcelhub.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import org.json.JSONObject
+import java.io.IOException
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
@@ -83,8 +85,9 @@ fun guessComCode(nu: String): String? = when {
 
 object ExpressQuery {
     private const val URL = "https://poll.kuaidi100.com/poll/query.do"
-    private val CUSTOMER = String(android.util.Base64.decode("NjI2RkQ2NUI0NkUyOUFDRTNDMURFQUM4RjcxNDZDODU=", android.util.Base64.DEFAULT))
-    private val KEY = String(android.util.Base64.decode("bld3ZkRPbmQzNDE4", android.util.Base64.DEFAULT))
+
+    private val CUSTOMER: String get() = BuildConfig.KD100_CUSTOMER
+    private val KEY: String get() = BuildConfig.KD100_KEY
 
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
@@ -93,6 +96,9 @@ object ExpressQuery {
 
     suspend fun query(nu: String, comCode: String?, phoneTail: String? = null): ExpressResult =
         withContext(Dispatchers.IO) {
+            if (CUSTOMER.isBlank() || KEY.isBlank()) {
+                throw ExpressQueryException.ServerError("未配置快递100密钥，请联系开发者")
+            }
             val cleanNu = nu.trim().replace(Regex("\\s"), "").uppercase()
             if (!cleanNu.matches(Regex("[A-Za-z0-9]{8,30}"))) throw ExpressQueryException.InvalidNumber
 
@@ -119,8 +125,13 @@ object ExpressQuery {
                 .header("Content-Type", "application/x-www-form-urlencoded")
                 .build()
 
-            val resp = client.newCall(req).execute()
-            val text = resp.body?.string() ?: throw ExpressQueryException.NetworkError()
+            val text = try {
+                client.newCall(req).execute().use { resp ->
+                    resp.body?.string() ?: throw ExpressQueryException.NetworkError()
+                }
+            } catch (e: IOException) {
+                throw ExpressQueryException.NetworkError(e)
+            }
             val json = JSONObject(text)
 
             if (json.optString("status") != "200") {
