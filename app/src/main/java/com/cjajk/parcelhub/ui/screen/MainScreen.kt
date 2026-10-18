@@ -930,7 +930,7 @@ private fun VerticalBarStandalone(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val allPlatforms = defaultPlatforms(context)
-    val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODEL_PRIVATE) }
+    val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
     val order = remember {
         mutableStateListOf<String>().apply {
             addAll(sp.getString(SP_ORDER, null)?.split(",")?.filter { id -> allPlatforms.any { it.id == id } }
