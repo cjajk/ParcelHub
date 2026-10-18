@@ -17,6 +17,7 @@ import androidx.compose.animation.core.infiniteRepeatable
 import androidx.compose.animation.core.rememberInfiniteTransition
 import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -51,6 +52,7 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
@@ -77,6 +79,7 @@ import com.cjajk.parcelhub.util.ExpressKeyStore
 import com.cjajk.parcelhub.util.ExpressQuery
 import com.cjajk.parcelhub.util.ExpressQueryException
 import com.cjajk.parcelhub.util.ExpressResult
+import com.cjajk.parcelhub.util.MascotIcons
 import kotlinx.coroutines.launch
 import kotlin.math.roundToInt
 import java.text.SimpleDateFormat
@@ -94,7 +97,7 @@ val WarnOrange = Color(0xFFFF9F0A)
 
 val TaobaoOrange = Color(0xFFFF6600)
 val PddRed = Color(0xFFE02020)
-val CainiaoGreen = Color(0xFF00B42A)
+val CainiaoBlue = Color(0xFF1677FF)
 val SfGray = Color(0xFF8C8C8C)
 val JdBrown = Color(0xFFB45309)
 
@@ -378,19 +381,19 @@ private fun QuickAccessPage() {
         Text("打开各平台取件身份码，扫码即可取件", fontSize = 12.sp, color = TextSecondary)
         Spacer(Modifier.height(12.dp))
 
-        QuickEntryCard("菜", "菜鸟驿站取件", "优先打开身份码，失败时进入菜鸟 App", CainiaoGreen) {
+        QuickEntryCard("菜鸟驿站取件", "优先打开身份码，失败时进入菜鸟 App", MascotIcons.cainiao) {
             DeepLinks.openAlipayCainiao(context)
         }
         Spacer(Modifier.height(10.dp))
-        QuickEntryCard("淘", "淘宝取件", "打开淘宝末端取件身份码", TaobaoOrange) {
+        QuickEntryCard("淘宝取件", "打开淘宝末端取件身份码", MascotIcons.taobao) {
             DeepLinks.openTaobaoIdentity(context)
         }
         Spacer(Modifier.height(10.dp))
-        QuickEntryCard("拼", "拼多多取件", "打开多多买菜取件身份码", PddRed) {
+        QuickEntryCard("拼多多取件", "打开多多买菜取件身份码", MascotIcons.pdd) {
             DeepLinks.openPddPickup(context)
         }
         Spacer(Modifier.height(10.dp))
-        QuickEntryCard("顺", "顺丰取件", "打开顺丰 App，未安装时跳转微信", SfGray) {
+        QuickEntryCard("顺丰取件", "打开顺丰 App，未安装时跳转微信", MascotIcons.sf) {
             DeepLinks.openSf(context)
         }
 
@@ -400,15 +403,15 @@ private fun QuickAccessPage() {
         Text("先确认有没有包裹，再前往驿站取件", fontSize = 12.sp, color = TextSecondary)
         Spacer(Modifier.height(12.dp))
 
-        QuickEntryCard("淘", "淘宝待取快递", "打开淘宝末端驿站待取列表", TaobaoOrange) {
+        QuickEntryCard("淘宝待取快递", "打开淘宝末端驿站待取列表", MascotIcons.taobao) {
             DeepLinks.openTaobaoWaiting(context)
         }
         Spacer(Modifier.height(10.dp))
-        QuickEntryCard("拼", "拼多多待取快递", "打开拼多多包裹待取列表", PddRed) {
+        QuickEntryCard("拼多多待取快递", "打开拼多多包裹待取列表", MascotIcons.pdd) {
             DeepLinks.openPddWaiting(context)
         }
         Spacer(Modifier.height(10.dp))
-        QuickEntryCard("京", "京东待取快递", "打开京东订单列表", JdBrown) {
+        QuickEntryCard("京东待取快递", "打开京东订单列表", MascotIcons.jd) {
             DeepLinks.openJd(context)
         }
 
@@ -418,10 +421,9 @@ private fun QuickAccessPage() {
 
 @Composable
 private fun QuickEntryCard(
-    char: String,
     title: String,
     subtitle: String,
-    color: Color,
+    mascot: ImageBitmap,
     onClick: () -> Unit
 ) {
     Card(
@@ -436,15 +438,13 @@ private fun QuickEntryCard(
             modifier = Modifier.padding(16.dp),
             verticalAlignment = Alignment.CenterVertically
         ) {
-            Box(
+            Image(
+                bitmap = mascot,
+                contentDescription = title,
                 modifier = Modifier
                     .size(48.dp)
                     .clip(RoundedCornerShape(12.dp))
-                    .background(color),
-                contentAlignment = Alignment.Center
-            ) {
-                Text(char, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
-            }
+            )
             Spacer(Modifier.width(16.dp))
             Column(modifier = Modifier.weight(1f)) {
                 Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
@@ -767,7 +767,6 @@ private fun ExpressQueryCard(
     onDismiss: () -> Unit,
     onSave: (String, String) -> Unit
 ) {
-    // 自动从最新轨迹提取取件码和驿站名
     val latestTrace = result.traces.firstOrNull()?.context.orEmpty()
     val parsed = remember(result.nu, latestTrace) { SmsParser.parse(null, latestTrace) }
     var code by remember(result.nu) { mutableStateOf(parsed?.code ?: result.nu) }
@@ -815,7 +814,6 @@ private fun ExpressQueryCard(
                 }
             }
             Spacer(Modifier.height(16.dp))
-            // 可编辑的取件码和驿站
             Text("保存为：", fontSize = 12.sp, color = TextSecondary)
             Spacer(Modifier.height(6.dp))
             OutlinedTextField(
@@ -843,17 +841,13 @@ private fun ExpressQueryCard(
     }
 }
 
-/** 从物流轨迹里提取【】中的驿站名，提取不到就用快递公司名兜底 */
 private fun extractStationFromTrace(trace: String, fallback: String): String {
-    // 匹配【...】中的内容
     val bracketRegex = Regex("【([^】]+)】")
     val matches = bracketRegex.findAll(trace).map { it.groupValues[1] }.toList()
-    // 优先取含"驿站/代收/服务点/柜/学院/食堂"等关键词的
     val keywords = listOf("驿站", "代收", "服务点", "快递柜", "学院", "食堂", "北侧", "南侧", "校区", "邮政")
     for (m in matches) {
         if (keywords.any { m.contains(it) }) return m
     }
-    // 其次取最后一个【】内容
     return matches.lastOrNull() ?: fallback
 }
 
@@ -936,7 +930,7 @@ private fun VerticalBarStandalone(
     val context = LocalContext.current
     val haptic = LocalHapticFeedback.current
     val allPlatforms = defaultPlatforms(context)
-    val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
+    val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODEL_PRIVATE) }
     val order = remember {
         mutableStateListOf<String>().apply {
             addAll(sp.getString(SP_ORDER, null)?.split(",")?.filter { id -> allPlatforms.any { it.id == id } }
