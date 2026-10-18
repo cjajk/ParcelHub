@@ -1,6 +1,7 @@
 package com.cjajk.parcelhub.util
 
 import android.content.ActivityNotFoundException
+import android.content.ComponentName
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
@@ -11,130 +12,170 @@ object DeepLinks {
 
     private const val TAG = "DeepLinks"
 
+    /** 淘宝身份码 */
     fun openTaobaoIdentity(context: Context) {
         val pkg = "com.taobao.taobao"
-        val h5 = "https://pages-fast.m.taobao.com/wow/z/uniapp/1100333/last-mile-fe/m-end-school-tab/home"
-        val schemes = listOf(
-            "tbopen://m.taobao.com/tbopen/index.html?h5Url=${Uri.encode(h5)}",
-            "taobao://"
+        val h5 = "https://pages-fast.m.taobao.com/wow/z/uniapp/1011717/last-mile-fe/end-collect-platform/identity-code?x-ssr=true"
+        val uris = listOf(
+            "taobao://m.taobao.com/tbopen/index.html?h5Url=${Uri.encode(h5)}",
+            "tbopen://m.taobao.com/tbopen/index.html?h5Url=${Uri.encode(h5)}"
         )
-        for (s in schemes) {
-            if (tryIntent(context, s)) return
+        for (u in uris) {
+            if (tryOpen(context, u, pkg)) return
         }
-        try {
-            val i = Intent(Intent.ACTION_VIEW, Uri.parse(h5)).apply {
-                setClassName(pkg, "com.taobao.browser.BrowserActivity")
-                addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            }
-            context.startActivity(i)
-            return
-        } catch (_: Exception) {}
+        if (tryOpen(context, h5, pkg)) return
         fallbackToPackage(context, pkg, "淘宝")
     }
 
+    /** 淘宝待取快递 */
     fun openTaobaoWaiting(context: Context) {
-        openTaobaoIdentity(context)
+        val pkg = "com.taobao.taobao"
+        val h5 = "https://pages-fast.m.taobao.com/wow/z/uniapp/1100333/last-mile-fe/m-end-school-tab/home"
+        val uris = listOf(
+            "taobao://m.taobao.com/tbopen/index.html?h5Url=${Uri.encode(h5)}",
+            "tbopen://m.taobao.com/tbopen/index.html?h5Url=${Uri.encode(h5)}"
+        )
+        for (u in uris) {
+            if (tryOpen(context, u, pkg)) return
+        }
+        if (tryOpen(context, h5, pkg)) return
+        fallbackToPackage(context, pkg, "淘宝")
     }
 
+    /** 拼多多身份码 */
     fun openPddPickup(context: Context) {
         val pkg = "com.xunmeng.pinduoduo"
-        val schemes = listOf(
+        val h5 = "https://m.pinduoduo.net/mdkd/package?entry_source=18&extra_params=from_wx_jump%3D1&p_channel=0"
+        val uris = listOf(
+            "pinduoduo://com.xunmeng.pinduoduo/mdkd/package?tab=ID_CODE&entry_source=11&refer_page_name=login&refer_page_sn=10169",
             "pinduoduo://com.xunmeng.pinduoduo/mdkd/package?tab=ID_CODE&entry_source=11",
-            "pinduoduo://com.xunmeng.pinduoduo/mdkd/package",
-            "pinduoduo://com.xunmeng.pinduoduo/"
-        )
-        for (s in schemes) {
-            if (tryIntent(context, s)) return
-        }
-        fallbackToPackage(context, pkg, "拼多多")
-    }
-
-    fun openPddWaiting(context: Context) {
-        val pkg = "com.xunmeng.pinduoduo"
-        val schemes = listOf(
-            "pinduoduo://com.xunmeng.pinduoduo/mdkd/package?tab=UNCLAIMED",
             "pinduoduo://com.xunmeng.pinduoduo/mdkd/package"
         )
-        for (s in schemes) {
-            if (tryIntent(context, s)) return
+        for (u in uris) {
+            if (tryOpen(context, u, pkg)) return
         }
+        if (tryOpen(context, h5, pkg)) return
         fallbackToPackage(context, pkg, "拼多多")
     }
 
-    fun openAlipayCainiao(context: Context) {
-        val pkg = "com.eg.android.AlipayGphone"
-        val authUrl = Uri.encode(
-            "https://market.m.taobao.com/app/cn-yz/multi-activity/authCode.html?bizEntry=ALIPAY_GUOGUO"
+    /** 拼多多待取快递 */
+    fun openPddWaiting(context: Context) {
+        val pkg = "com.xunmeng.pinduoduo"
+        val h5 = "https://m.pinduoduo.net/mdkd/package?entry_source=18&extra_params=from_wx_jump%3D1&p_channel=0"
+        val uris = listOf(
+            "pinduoduo://com.xunmeng.pinduoduo/mdkd/package"
         )
-        val schemes = listOf(
-            "alipays://platformapi/startapp?appId=20000067&url=$authUrl",
-            "alipays://platformapi/startapp?saId=2021001141626787"
-        )
-        for (s in schemes) {
-            if (tryIntent(context, s)) return
+        for (u in uris) {
+            if (tryOpen(context, u, pkg)) return
         }
-        fallbackToPackage(context, pkg, "支付宝")
+        if (tryOpen(context, h5, pkg)) return
+        fallbackToPackage(context, pkg, "拼多多")
     }
 
+    /** 菜鸟身份码 */
+    fun openAlipayCainiao(context: Context) {
+        val pkg = "com.cainiao.wireless"
+        val web = "https://market.m.taobao.com/app/cn-yz/multi-activity/authCode.html?bizEntry=ALIPAY_GUOGUO"
+        val uris = listOf(
+            "cainiao://desktop/station_code"
+        )
+        for (u in uris) {
+            if (tryOpen(context, u, pkg)) return
+        }
+        if (tryOpenInstalledApp(context, pkg)) {
+            Toast.makeText(context, "菜鸟身份码直达未成功，已打开菜鸟 App，请在 App 内查看", Toast.LENGTH_LONG).show()
+            return
+        }
+        if (tryOpen(context, web, null)) return
+        Toast.makeText(context, "未安装菜鸟 App", Toast.LENGTH_SHORT).show()
+    }
+
+    /** 顺丰 */
     fun openSf(context: Context) {
-        val schemes = listOf(
+        val pkg = "com.sf.activity"
+        val pkg2 = "com.sfexpress.activity"
+        val uris = listOf(
             "sf-express://",
             "sfexpress://"
         )
-        for (s in schemes) {
-            if (tryIntent(context, s)) return
+        for (u in uris) {
+            if (tryOpen(context, u, pkg)) return
+            if (tryOpen(context, u, pkg2)) return
         }
-        val intent = context.packageManager.getLaunchIntentForPackage("com.sf.activity")
-            ?: context.packageManager.getLaunchIntentForPackage("com.sfexpress.activity")
-        if (intent != null) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } else {
-            try {
-                val weixin = Intent(Intent.ACTION_VIEW, Uri.parse("weixin://")).apply {
-                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                }
-                context.startActivity(weixin)
-                Toast.makeText(context, "已打开微信，请搜索「顺丰速运+」小程序", Toast.LENGTH_LONG).show()
-            } catch (_: Exception) {
-                Toast.makeText(context, "未安装顺丰 App 或微信", Toast.LENGTH_SHORT).show()
-            }
-        }
-    }
-
-    /** 京东：直接启动主页，不用复杂 deeplink 避免闪退 */
-    fun openJd(context: Context) {
-        val intent = context.packageManager.getLaunchIntentForPackage("com.jingdong.app.mall")
-        if (intent != null) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } else {
-            Toast.makeText(context, "未安装京东 App", Toast.LENGTH_SHORT).show()
-        }
-    }
-
-    private fun tryIntent(context: Context, uri: String): Boolean {
-        return try {
-            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uri)).apply {
+        if (tryOpenInstalledApp(context, pkg)) return
+        if (tryOpenInstalledApp(context, pkg2)) return
+        try {
+            val weixin = Intent(Intent.ACTION_VIEW, Uri.parse("weixin://")).apply {
                 addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             }
+            context.startActivity(weixin)
+            Toast.makeText(context, "已打开微信，请搜索「顺丰速运+」小程序", Toast.LENGTH_LONG).show()
+        } catch (_: Exception) {
+            Toast.makeText(context, "未安装顺丰 App 或微信", Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    /** 京东待取快递 */
+    fun openJd(context: Context) {
+        val pkg = "com.jingdong.app.mall"
+        val web = "https://order.jd.com/center/list.action"
+        val jdParams = Uri.encode("{\"category\":\"jump\",\"des\":\"orderlist\"}")
+        val uris = listOf(
+            "openjd://virtual?params=$jdParams"
+        )
+        for (u in uris) {
+            if (tryOpen(context, u, pkg)) return
+        }
+        if (tryOpen(context, web, pkg)) return
+        fallbackToPackage(context, pkg, "京东")
+    }
+
+    private fun tryOpen(context: Context, uriStr: String, pkg: String?): Boolean {
+        return try {
+            val intent = Intent(Intent.ACTION_VIEW, Uri.parse(uriStr)).apply {
+                if (pkg != null) setPackage(pkg)
+                addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+                if (context !is android.app.Activity) {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+            }
+            val resolved: ComponentName? = intent.resolveActivity(context.packageManager)
+            if (resolved == null) {
+                Log.i(TAG, "No activity resolved for $uriStr with package $pkg")
+                return false
+            }
             context.startActivity(intent)
+            Log.i(TAG, "Opened $uriStr with ${resolved.flattenToShortString()}")
             true
-        } catch (_: ActivityNotFoundException) {
+        } catch (e: ActivityNotFoundException) {
+            Log.w(TAG, "Activity not found for $uriStr", e)
             false
+        } catch (e: SecurityException) {
+            Log.w(TAG, "Security exception for $uriStr", e)
+            false
+        } catch (e: IllegalArgumentException) {
+            Log.w(TAG, "Illegal argument for $uriStr", e)
+            false
+        }
+    }
+
+    private fun tryOpenInstalledApp(context: Context, pkg: String): Boolean {
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(pkg) ?: return false
+        launchIntent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+        if (context !is android.app.Activity) {
+            launchIntent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        return try {
+            context.startActivity(launchIntent)
+            true
         } catch (e: Exception) {
-            Log.e(TAG, "error launching $uri", e)
+            Log.w(TAG, "Could not open app $pkg", e)
             false
         }
     }
 
     private fun fallbackToPackage(context: Context, pkg: String, name: String) {
-        val intent = context.packageManager.getLaunchIntentForPackage(pkg)
-        if (intent != null) {
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            context.startActivity(intent)
-        } else {
-            Toast.makeText(context, "未安装$name App", Toast.LENGTH_SHORT).show()
-        }
+        if (tryOpenInstalledApp(context, pkg)) return
+        Toast.makeText(context, "未安装$name App", Toast.LENGTH_SHORT).show()
     }
 }
