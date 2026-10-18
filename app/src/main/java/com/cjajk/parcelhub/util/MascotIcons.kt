@@ -3,7 +3,9 @@ package com.cjajk.parcelhub.util
 import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.Color
+import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.drawable.toBitmap
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
 import com.cjajk.parcelhub.R
@@ -19,7 +21,7 @@ object MascotIcons {
         appContext = context.applicationContext
     }
 
-    private fun loadDrawable(@Suppress("SameParameterValue") resId: Int): ImageBitmap {
+    private fun loadDrawable(@DrawableRes resId: Int): ImageBitmap {
         return try {
             ContextCompat.getDrawable(appContext, resId)
                 ?.toBitmap()
