@@ -76,7 +76,6 @@ object DeepLinks {
     fun openAlipayCainiao(context: Context) {
         val alipayPkg = "com.eg.android.AlipayGphone"
         val web = "https://market.m.taobao.com/app/cn-yz/multi-activity/authCode.html?bizEntry=ALIPAY_GUOGUO"
-        // 优先走支付宝内打开菜鸟身份码，不跳独立菜鸟App
         if (tryOpen(context, web, alipayPkg)) return
         if (tryOpenInstalledApp(context, alipayPkg)) {
             Toast.makeText(context, "已打开支付宝，请在小程序中找到菜鸟身份码", Toast.LENGTH_LONG).show()
