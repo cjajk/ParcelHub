@@ -92,7 +92,7 @@
         </receiver>
 
         <receiver
-            android:name=".widget.PickupWidget"
+            android:name=".widget.ParcelHubWidgetProvider"
             android:exported="true"
             android:permission="android.permission.BIND_APPWIDGET">
             <intent-filter>
@@ -100,7 +100,7 @@
             </intent-filter>
             <meta-data
                 android:name="android.appwidget.provider"
-                android:resource="@xml/widget_pickup_info" />
+                android:resource="@xml/parcelhub_widget_info" />
         </receiver>
 
     </application>
