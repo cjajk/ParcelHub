@@ -32,9 +32,7 @@ object DeepLinks {
         fallbackToPackage(context, pkg, "淘宝")
     }
 
-    /** 淘宝待取快递列表 */
     fun openTaobaoWaiting(context: Context) {
-        // 复用身份码页，里面有待取列表入口
         openTaobaoIdentity(context)
     }
 
@@ -43,8 +41,7 @@ object DeepLinks {
         val schemes = listOf(
             "pinduoduo://com.xunmeng.pinduoduo/mdkd/package?tab=ID_CODE&entry_source=11",
             "pinduoduo://com.xunmeng.pinduoduo/mdkd/package",
-            "pinduoduo://com.xunmeng.pinduoduo/",
-            "pinduoduo://"
+            "pinduoduo://com.xunmeng.pinduoduo/"
         )
         for (s in schemes) {
             if (tryIntent(context, s)) return
@@ -52,7 +49,6 @@ object DeepLinks {
         fallbackToPackage(context, pkg, "拼多多")
     }
 
-    /** 拼多多待取包裹列表 */
     fun openPddWaiting(context: Context) {
         val pkg = "com.xunmeng.pinduoduo"
         val schemes = listOf(
@@ -94,28 +90,20 @@ object DeepLinks {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         } else {
-            // 未装顺丰 App，提示微信小程序
             try {
                 val weixin = Intent(Intent.ACTION_VIEW, Uri.parse("weixin://")).apply {
                     addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
                 }
                 context.startActivity(weixin)
-                Toast.makeText(context, "已打开微信，请搜索「顺丰速运+」小程序查看身份码", Toast.LENGTH_LONG).show()
+                Toast.makeText(context, "已打开微信，请搜索「顺丰速运+」小程序", Toast.LENGTH_LONG).show()
             } catch (_: Exception) {
                 Toast.makeText(context, "未安装顺丰 App 或微信", Toast.LENGTH_SHORT).show()
             }
         }
     }
 
+    /** 京东：直接启动主页，不用复杂 deeplink 避免闪退 */
     fun openJd(context: Context) {
-        val schemes = listOf(
-            "openapp.jdmobile://virtual?params=%7B%22desc%22%3A%22orderlist%22%7D",
-            "openapp.jdmobile://",
-            "openapp.jdmobile://virtual?params=%7B%22desc%22%3A%22jd%22%7D"
-        )
-        for (s in schemes) {
-            if (tryIntent(context, s)) return
-        }
         val intent = context.packageManager.getLaunchIntentForPackage("com.jingdong.app.mall")
         if (intent != null) {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
