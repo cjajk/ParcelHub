@@ -6,11 +6,12 @@ object SmsParser {
 
     // 取件码后允许省略"为/是/："，直接跟码值；兼容 "取件码C5-1227"、"取件码123456"
     private val guidePattern = Pattern.compile(
-        "(?:取件码|取件密码|提货码|领取码|密码)\\s*(?:为|是|:|：|就是)?\\s*([A-Za-z0-9]{1,4}-[A-Za-z0-9]{1,4}(?:-[A-Za-z0-9]{1,6})?|[A-Za-z0-9]{4,12})"
+        "(?:取件码|取件密码|提货码|领取码|密码|凭)\\s*(?:为|是|:|：|就是)?\\s*([A-Za-z0-9]{1,4}-[A-Za-z0-9]{1,4}(?:-[A-Za-z0-9]{1,6})?|[A-Za-z0-9]{4,12})"
     )
 
+    // 兜底：纯横杠连接的码，不强制词边界（避免中文紧贴数字时 \\b 失效）
     private val codePattern = Pattern.compile(
-        "\\b([A-Za-z]?\\d{1,3}-[A-Za-z]?\\d{1,4}-[A-Za-z0-9]{1,6})\\b"
+        "([A-Za-z]?\\d{1,3}-[A-Za-z]?\\d{1,4}-[A-Za-z0-9]{1,6})"
     )
 
     // 【】签名里的关键词到承运商的映射
@@ -29,7 +30,9 @@ object SmsParser {
         "丹鸟" to "丹鸟",
         "菜鸟" to "菜鸟驿站",
         "丰巢" to "丰巢柜",
-        "妈妈驿站" to "妈妈驿站"
+        "妈妈驿站" to "妈妈驿站",
+        "多多" to "拼多多",
+        "兔喜" to "兔喜快递"
     )
 
     // 短缩写用词边界匹配，避免 EMS 命中 items、SF 命中链接
@@ -41,7 +44,7 @@ object SmsParser {
 
     private val stationKeywords = listOf(
         "菜鸟驿站", "丰巢", "妈妈驿站", "驿收发", "日日顺",
-        "快递柜", "快递站", "便利店", "服务点"
+        "快递柜", "快递站", "便利店", "服务点", "代收点", "兔喜"
     )
 
     fun parse(sender: String?, body: String): PackageRecord? {
@@ -51,6 +54,7 @@ object SmsParser {
                 text.contains("取件") ||
                 text.contains("快递") ||
                 text.contains("包裹") ||
+                text.contains("代收点") ||
                 stationKeywords.any { text.contains(it) }
 
         if (!looksExpress) return null
@@ -103,6 +107,13 @@ object SmsParser {
                 val end = minOf(text.length, idx + kw.length + 12)
                 return text.substring(start, end).replace("\n", " ").trim()
             }
+        }
+        // 没有命中关键词时，尝试截取"到XX取"之间的地址
+        val toIdx = text.indexOf("到")
+        val quIdx = text.indexOf("取", toIdx + 1)
+        if (toIdx >= 0 && quIdx > toIdx) {
+            val addr = text.substring(toIdx + 1, quIdx).trim()
+            if (addr.length in 2..30) return addr
         }
         return ""
     }
