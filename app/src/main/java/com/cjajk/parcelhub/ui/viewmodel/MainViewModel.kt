@@ -5,6 +5,7 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import com.cjajk.parcelhub.data.PackageRecord
 import com.cjajk.parcelhub.data.PackageStore
+import com.cjajk.parcelhub.reminder.ReminderScheduler
 import com.cjajk.parcelhub.widget.PickupWidget
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -18,6 +19,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     init {
         refresh()
+        ReminderScheduler.rescheduleAll(app)
     }
 
     fun refresh() {
@@ -29,10 +31,13 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
 
     fun togglePickedUp(record: PackageRecord) {
         store.markPickedUp(record.id, !record.pickedUp)
+        // 已取走就取消提醒
+        if (!record.pickedUp) ReminderScheduler.cancel(getApplication(), record.id)
         refresh()
     }
 
     fun delete(record: PackageRecord) {
+        ReminderScheduler.cancel(getApplication(), record.id)
         store.delete(record.id)
         refresh()
     }
@@ -46,6 +51,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
                 rawSms = "手动添加"
             )
         )
+        refresh()
+    }
+
+    fun setRemindAt(record: PackageRecord, timeMs: Long?) {
+        val list = store.getAll()
+        val idx = list.indexOfFirst { it.id == record.id }
+        if (idx >= 0) {
+            list[idx] = list[idx].copy(remindAt = timeMs)
+            // 触发 save
+            store.delete(record.id)
+            store.add(list[idx])
+            if (timeMs != null) {
+                ReminderScheduler.schedule(getApplication(), list[idx])
+            } else {
+                ReminderScheduler.cancel(getApplication(), record.id)
+            }
+        }
         refresh()
     }
 }
