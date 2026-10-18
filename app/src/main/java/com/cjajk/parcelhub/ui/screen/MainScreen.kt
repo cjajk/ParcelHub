@@ -1,5 +1,6 @@
 package com.cjajk.parcelhub.ui.screen
 
+import android.app.DatePickerDialog
 import android.app.TimePickerDialog
 import android.content.Context
 import android.content.Intent
@@ -147,7 +148,6 @@ fun MainScreen(vm: MainViewModel) {
     }
 
     val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
-    // 记住转置状态：上次是横的还是竖的
     var verticalBar by remember { mutableStateOf(sp.getBoolean(SP_VERTICAL, false)) }
     var sideOffsetPx by remember { mutableIntStateOf(sp.getInt(SP_SIDE_OFFSET, 0)) }
 
@@ -1189,22 +1189,41 @@ private fun PackageCard(
                     onSetRemind(null)
                     Toast.makeText(context, "已取消提醒", Toast.LENGTH_SHORT).show()
                 } else {
-                    val cal = java.util.Calendar.getInstance().apply {
-                        add(java.util.Calendar.HOUR_OF_DAY, 1)
-                        set(java.util.Calendar.MINUTE, 0)
+                    // 先选日期（默认今天），再选时间（默认下一小时）
+                    val now = Calendar.getInstance()
+                    val cal = Calendar.getInstance().apply {
+                        timeInMillis = now.timeInMillis
+                        add(Calendar.HOUR_OF_DAY, 1)
+                        set(Calendar.MINUTE, 0)
+                        set(Calendar.SECOND, 0)
                     }
-                    TimePickerDialog(
+                    DatePickerDialog(
                         context,
-                        { _, h, m ->
-                            cal.set(java.util.Calendar.HOUR_OF_DAY, h)
-                            cal.set(java.util.Calendar.MINUTE, m)
-                            onSetRemind(cal.timeInMillis)
-                            Toast.makeText(context, "已设提醒 ${String.format("%02d:%02d", h, m)}", Toast.LENGTH_SHORT).show()
+                        { _, y, m, d ->
+                            cal.set(Calendar.YEAR, y)
+                            cal.set(Calendar.MONTH, m)
+                            cal.set(Calendar.DAY_OF_MONTH, d)
+                            TimePickerDialog(
+                                context,
+                                { _, h, minute ->
+                                    cal.set(Calendar.HOUR_OF_DAY, h)
+                                    cal.set(Calendar.MINUTE, minute)
+                                    onSetRemind(cal.timeInMillis)
+                                    val fmt = SimpleDateFormat("MM-dd HH:mm", Locale.getDefault())
+                                    Toast.makeText(context, "已设提醒 ${fmt.format(cal.time)}", Toast.LENGTH_SHORT).show()
+                                },
+                                cal.get(Calendar.HOUR_OF_DAY),
+                                cal.get(Calendar.MINUTE),
+                                true
+                            ).show()
                         },
-                        cal.get(java.util.Calendar.HOUR_OF_DAY),
-                        cal.get(java.util.Calendar.MINUTE),
-                        true
-                    ).show()
+                        cal.get(Calendar.YEAR),
+                        cal.get(Calendar.MONTH),
+                        cal.get(Calendar.DAY_OF_MONTH)
+                    ).apply {
+                        // 不允许选过去的日期
+                        datePicker.minDate = now.timeInMillis
+                    }.show()
                 }
             }) {
                 Icon(
