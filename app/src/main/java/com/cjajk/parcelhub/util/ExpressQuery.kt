@@ -1,6 +1,5 @@
 package com.cjajk.parcelhub.util
 
-import com.cjajk.parcelhub.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import okhttp3.FormBody
@@ -46,6 +45,7 @@ sealed class ExpressQueryException(message: String) : Exception(message) {
     object NeedSelectCompany : ExpressQueryException("无法识别快递公司，请手动选择")
     object NeedPhone : ExpressQueryException("顺丰/京东隐私单号需填写手机号后4位")
     object NotFound : ExpressQueryException("暂无物流轨迹，请确认单号")
+    object NotConfigured : ExpressQueryException("未配置快递100密钥，请点上方\"配置密钥\"填写")
     class ServerError(msg: String) : ExpressQueryException(msg)
     class NetworkError(cause: Throwable? = null) : ExpressQueryException("网络连接失败")
 }
@@ -86,65 +86,67 @@ fun guessComCode(nu: String): String? = when {
 object ExpressQuery {
     private const val URL = "https://poll.kuaidi100.com/poll/query.do"
 
-    private val CUSTOMER: String get() = BuildConfig.KD100_CUSTOMER
-    private val KEY: String get() = BuildConfig.KD100_KEY
-
     private val client = OkHttpClient.Builder()
         .connectTimeout(10, TimeUnit.SECONDS)
         .readTimeout(15, TimeUnit.SECONDS)
         .build()
 
-    suspend fun query(nu: String, comCode: String?, phoneTail: String? = null): ExpressResult =
-        withContext(Dispatchers.IO) {
-            if (CUSTOMER.isBlank() || KEY.isBlank()) {
-                throw ExpressQueryException.ServerError("未配置快递100密钥，请联系开发者")
+    suspend fun query(
+        nu: String,
+        comCode: String?,
+        phoneTail: String? = null,
+        customer: String,
+        key: String
+    ): ExpressResult = withContext(Dispatchers.IO) {
+        if (customer.isBlank() || key.isBlank()) throw ExpressQueryException.NotConfigured
+
+        val cleanNu = nu.trim().replace(Regex("\\s"), "").uppercase()
+        if (!cleanNu.matches(Regex("[A-Za-z0-9]{8,30}"))) throw ExpressQueryException.InvalidNumber
+
+        val code = comCode ?: guessComCode(cleanNu) ?: throw ExpressQueryException.NeedSelectCompany
+
+        val param = JSONObject().apply {
+            put("com", code)
+            put("num", cleanNu)
+            put("resultv2", "4")
+            if (!phoneTail.isNullOrBlank()) put("phone", phoneTail.trim())
+        }.toString()
+
+        val sign = md5(param + key + customer)
+
+        val body = FormBody.Builder()
+            .add("customer", customer)
+            .add("sign", sign)
+            .add("param", param)
+            .build()
+
+        val req = Request.Builder()
+            .url(URL)
+            .post(body)
+            .header("Content-Type", "application/x-www-form-urlencoded")
+            .build()
+
+        val text = try {
+            client.newCall(req).execute().use { resp ->
+                resp.body?.string() ?: throw ExpressQueryException.NetworkError()
             }
-            val cleanNu = nu.trim().replace(Regex("\\s"), "").uppercase()
-            if (!cleanNu.matches(Regex("[A-Za-z0-9]{8,30}"))) throw ExpressQueryException.InvalidNumber
-
-            val code = comCode ?: guessComCode(cleanNu) ?: throw ExpressQueryException.NeedSelectCompany
-
-            val param = JSONObject().apply {
-                put("com", code)
-                put("num", cleanNu)
-                put("resultv2", "4")
-                if (!phoneTail.isNullOrBlank()) put("phone", phoneTail.trim())
-            }.toString()
-
-            val sign = md5(param + KEY + CUSTOMER)
-
-            val body = FormBody.Builder()
-                .add("customer", CUSTOMER)
-                .add("sign", sign)
-                .add("param", param)
-                .build()
-
-            val req = Request.Builder()
-                .url(URL)
-                .post(body)
-                .header("Content-Type", "application/x-www-form-urlencoded")
-                .build()
-
-            val text = try {
-                client.newCall(req).execute().use { resp ->
-                    resp.body?.string() ?: throw ExpressQueryException.NetworkError()
-                }
-            } catch (e: IOException) {
-                throw ExpressQueryException.NetworkError(e)
-            }
-            val json = JSONObject(text)
-
-            if (json.optString("status") != "200") {
-                val msg = json.optString("message", "查询失败")
-                throw when {
-                    msg.contains("手机") || msg.contains("phone") -> ExpressQueryException.NeedPhone
-                    msg.contains("无结果") || msg.contains("查无") -> ExpressQueryException.NotFound
-                    else -> ExpressQueryException.ServerError(msg)
-                }
-            }
-
-            parseResult(cleanNu, code, json)
+        } catch (e: IOException) {
+            throw ExpressQueryException.NetworkError(e)
         }
+        val json = JSONObject(text)
+
+        if (json.optString("status") != "200") {
+            val msg = json.optString("message", "查询失败")
+            throw when {
+                msg.contains("手机") || msg.contains("phone") -> ExpressQueryException.NeedPhone
+                msg.contains("无结果") || msg.contains("查无") -> ExpressQueryException.NotFound
+                msg.contains("customer") || msg.contains("sign") || msg.contains("key") -> ExpressQueryException.ServerError("密钥校验失败，请检查 customer/key 是否填对")
+                else -> ExpressQueryException.ServerError(msg)
+            }
+        }
+
+        parseResult(cleanNu, code, json)
+    }
 
     private fun parseResult(nu: String, comCode: String, json: JSONObject): ExpressResult {
         val arr = json.getJSONArray("data")
