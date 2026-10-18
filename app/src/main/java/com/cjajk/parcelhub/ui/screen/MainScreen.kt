@@ -31,6 +31,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Alarm
+import androidx.compose.material.icons.filled.ArrowForwardIos
 import androidx.compose.material.icons.filled.ContentPaste
 import androidx.compose.material.icons.filled.Inbox
 import androidx.compose.material.icons.filled.Key
@@ -89,6 +90,13 @@ val TextSecondary = Color(0xFF98989F)
 val CodeGreen = Color(0xFF30D158)
 val AccentBlue = Color(0xFF0A84FF)
 val WarnOrange = Color(0xFFFF9F0A)
+
+// 平台入口配色（类似参考图的彩色卡片）
+val TaobaoOrange = Color(0xFFFF6600)
+val PddRed = Color(0xFFE02020)
+val CainiaoGreen = Color(0xFF00B42A)
+val SfGray = Color(0xFF8C8C8C)
+val JdBrown = Color(0xFFB45309)
 
 data class Platform(
     val id: String,
@@ -206,35 +214,42 @@ fun MainScreen(vm: MainViewModel) {
                         text = { Text("待取 $waiting", fontWeight = FontWeight.Medium, color = TextPrimary) })
                     Tab(selected = tab == 1, onClick = { tab = 1 },
                         text = { Text("已取 $done", fontWeight = FontWeight.Medium, color = TextSecondary) })
+                    Tab(selected = tab == 2, onClick = { tab = 2 },
+                        text = { Text("快捷取件", fontWeight = FontWeight.Medium, color = TextSecondary) })
                 }
 
-                val list = packages.filter { if (tab == 0) !it.pickedUp else it.pickedUp }
-                LazyColumn(
-                    contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 12.dp),
-                    verticalArrangement = Arrangement.spacedBy(12.dp)
-                ) {
-                    if (queryResult != null) {
-                        item(key = "express_query") {
-                            ExpressQueryCard(queryResult!!, onDismiss = { queryResult = null },
-                                onSave = {
-                                    vm.addManual(queryResult!!.nu, "", queryResult!!.com)
-                                    Toast.makeText(context, "已保存到列表", Toast.LENGTH_SHORT).show()
-                                    queryResult = null
-                                })
+                when (tab) {
+                    0, 1 -> {
+                        val list = packages.filter { if (tab == 0) !it.pickedUp else it.pickedUp }
+                        LazyColumn(
+                            contentPadding = PaddingValues(16.dp, 12.dp, 16.dp, 12.dp),
+                            verticalArrangement = Arrangement.spacedBy(12.dp)
+                        ) {
+                            if (queryResult != null) {
+                                item(key = "express_query") {
+                                    ExpressQueryCard(queryResult!!, onDismiss = { queryResult = null },
+                                        onSave = {
+                                            vm.addManual(queryResult!!.nu, "", queryResult!!.com)
+                                            Toast.makeText(context, "已保存到列表", Toast.LENGTH_SHORT).show()
+                                            queryResult = null
+                                        })
+                                }
+                            }
+                            if (list.isEmpty() && queryResult == null) {
+                                item { EmptyHint(tab) }
+                            }
+                            items(list, key = { it.id }) { item ->
+                                PackageCard(
+                                    item = item,
+                                    onToggle = { vm.togglePickedUp(item) },
+                                    onDelete = { vm.delete(item) },
+                                    onSetRemind = { ms -> vm.setRemindAt(item, ms) },
+                                    modifier = Modifier.animateItem()
+                                )
+                            }
                         }
                     }
-                    if (list.isEmpty() && queryResult == null) {
-                        item { EmptyHint(tab) }
-                    }
-                    items(list, key = { it.id }) { item ->
-                        PackageCard(
-                            item = item,
-                            onToggle = { vm.togglePickedUp(item) },
-                            onDelete = { vm.delete(item) },
-                            onSetRemind = { ms -> vm.setRemindAt(item, ms) },
-                            modifier = Modifier.animateItem()
-                        )
-                    }
+                    2 -> QuickAccessPage()
                 }
             }
         }
@@ -336,6 +351,104 @@ fun MainScreen(vm: MainViewModel) {
 
     if (showDailyReminder) {
         DailyReminderDialog(onDismiss = { showDailyReminder = false })
+    }
+}
+
+/** 快捷取件页：身份码 + 待取列表 */
+@Composable
+private fun QuickAccessPage() {
+    val context = LocalContext.current
+    Column(
+        modifier = Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(16.dp)
+    ) {
+        Text("身份码", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+        Spacer(Modifier.height(4.dp))
+        Text("打开各平台取件身份码，扫码即可取件", fontSize = 12.sp, color = TextSecondary)
+        Spacer(Modifier.height(12.dp))
+
+        QuickEntryCard("菜", "菜鸟驿站取件", "优先打开身份码，失败时进入菜鸟 App", CainiaoGreen) {
+            DeepLinks.openAlipayCainiao(context)
+        }
+        Spacer(Modifier.height(10.dp))
+        QuickEntryCard("淘", "淘宝取件", "打开淘宝末端取件身份码", TaobaoOrange) {
+            DeepLinks.openTaobaoIdentity(context)
+        }
+        Spacer(Modifier.height(10.dp))
+        QuickEntryCard("拼", "拼多多取件", "打开多多买菜取件身份码", PddRed) {
+            DeepLinks.openPddPickup(context)
+        }
+        Spacer(Modifier.height(10.dp))
+        QuickEntryCard("顺", "顺丰取件", "打开顺丰 App，未安装时跳转微信", SfGray) {
+            DeepLinks.openSf(context)
+        }
+
+        Spacer(Modifier.height(24.dp))
+        Text("查看待取", fontSize = 18.sp, fontWeight = FontWeight.Bold, color = TextPrimary)
+        Spacer(Modifier.height(4.dp))
+        Text("先确认有没有包裹，再前往驿站取件", fontSize = 12.sp, color = TextSecondary)
+        Spacer(Modifier.height(12.dp))
+
+        QuickEntryCard("淘", "淘宝待取快递", "打开淘宝末端驿站待取列表", TaobaoOrange) {
+            DeepLinks.openTaobaoWaiting(context)
+        }
+        Spacer(Modifier.height(10.dp))
+        QuickEntryCard("拼", "拼多多待取快递", "打开拼多多包裹待取列表", PddRed) {
+            DeepLinks.openPddWaiting(context)
+        }
+        Spacer(Modifier.height(10.dp))
+        QuickEntryCard("京", "京东待取快递", "打开京东订单列表", JdBrown) {
+            DeepLinks.openJd(context)
+        }
+
+        Spacer(Modifier.height(100.dp))
+    }
+}
+
+@Composable
+private fun QuickEntryCard(
+    char: String,
+    title: String,
+    subtitle: String,
+    color: Color,
+    onClick: () -> Unit
+) {
+    Card(
+        modifier = Modifier
+            .fillMaxWidth()
+            .clickable { onClick() },
+        shape = RoundedCornerShape(16.dp),
+        colors = CardDefaults.cardColors(containerColor = CardDark),
+        elevation = CardDefaults.cardElevation(defaultElevation = 0.dp)
+    ) {
+        Row(
+            modifier = Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically
+        ) {
+            Box(
+                modifier = Modifier
+                    .size(48.dp)
+                    .clip(RoundedCornerShape(12.dp))
+                    .background(color),
+                contentAlignment = Alignment.Center
+            ) {
+                Text(char, color = Color.White, fontSize = 20.sp, fontWeight = FontWeight.Bold)
+            }
+            Spacer(Modifier.width(16.dp))
+            Column(modifier = Modifier.weight(1f)) {
+                Text(title, fontSize = 16.sp, fontWeight = FontWeight.SemiBold, color = TextPrimary)
+                Spacer(Modifier.height(2.dp))
+                Text(subtitle, fontSize = 12.sp, color = TextSecondary)
+            }
+            Icon(
+                Icons.Default.ArrowForwardIos,
+                contentDescription = null,
+                tint = TextSecondary,
+                modifier = Modifier.size(14.dp)
+            )
+        }
     }
 }
 
