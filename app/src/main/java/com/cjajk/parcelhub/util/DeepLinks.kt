@@ -32,13 +32,32 @@ object DeepLinks {
         fallbackToPackage(context, pkg, "淘宝")
     }
 
+    /** 淘宝待取快递列表 */
+    fun openTaobaoWaiting(context: Context) {
+        // 复用身份码页，里面有待取列表入口
+        openTaobaoIdentity(context)
+    }
+
     fun openPddPickup(context: Context) {
         val pkg = "com.xunmeng.pinduoduo"
         val schemes = listOf(
-            "pinduoduo://com.xunmeng.pinduoduo/mdkd/package",
             "pinduoduo://com.xunmeng.pinduoduo/mdkd/package?tab=ID_CODE&entry_source=11",
+            "pinduoduo://com.xunmeng.pinduoduo/mdkd/package",
             "pinduoduo://com.xunmeng.pinduoduo/",
             "pinduoduo://"
+        )
+        for (s in schemes) {
+            if (tryIntent(context, s)) return
+        }
+        fallbackToPackage(context, pkg, "拼多多")
+    }
+
+    /** 拼多多待取包裹列表 */
+    fun openPddWaiting(context: Context) {
+        val pkg = "com.xunmeng.pinduoduo"
+        val schemes = listOf(
+            "pinduoduo://com.xunmeng.pinduoduo/mdkd/package?tab=UNCLAIMED",
+            "pinduoduo://com.xunmeng.pinduoduo/mdkd/package"
         )
         for (s in schemes) {
             if (tryIntent(context, s)) return
@@ -75,12 +94,22 @@ object DeepLinks {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         } else {
-            Toast.makeText(context, "未安装顺丰 App，请在微信小程序中搜索「顺丰速运」", Toast.LENGTH_LONG).show()
+            // 未装顺丰 App，提示微信小程序
+            try {
+                val weixin = Intent(Intent.ACTION_VIEW, Uri.parse("weixin://")).apply {
+                    addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                }
+                context.startActivity(weixin)
+                Toast.makeText(context, "已打开微信，请搜索「顺丰速运+」小程序查看身份码", Toast.LENGTH_LONG).show()
+            } catch (_: Exception) {
+                Toast.makeText(context, "未安装顺丰 App 或微信", Toast.LENGTH_SHORT).show()
+            }
         }
     }
 
     fun openJd(context: Context) {
         val schemes = listOf(
+            "openapp.jdmobile://virtual?params=%7B%22desc%22%3A%22orderlist%22%7D",
             "openapp.jdmobile://",
             "openapp.jdmobile://virtual?params=%7B%22desc%22%3A%22jd%22%7D"
         )
@@ -92,7 +121,7 @@ object DeepLinks {
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         } else {
-            Toast.makeText(context, "未安装京东 App，请在微信小程序中搜索「京东快递」", Toast.LENGTH_LONG).show()
+            Toast.makeText(context, "未安装京东 App", Toast.LENGTH_SHORT).show()
         }
     }
 
