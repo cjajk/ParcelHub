@@ -10,12 +10,46 @@
     <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
 
     <queries>
+        <package android:name="com.cainiao.wireless" />
         <package android:name="com.taobao.taobao" />
         <package android:name="com.eg.android.AlipayGphone" />
         <package android:name="com.xunmeng.pinduoduo" />
         <package android:name="com.sf.activity" />
         <package android:name="com.sfexpress.activity" />
         <package android:name="com.jingdong.app.mall" />
+        <package android:name="com.tencent.mm" />
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="cainiao" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="tbopen" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="taobao" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="pinduoduo" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="openjd" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="sf-express" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="sfexpress" />
+        </intent>
+        <intent>
+            <action android:name="android.intent.action.VIEW" />
+            <data android:scheme="weixin" />
+        </intent>
     </queries>
 
     <application
@@ -59,8 +93,8 @@
 
         <receiver
             android:name=".widget.PickupWidget"
-            android:exported="true">
-            <intent-filter>
+            android:exported="true"
+            android:intent-filter>
                 <action android:name="android.appwidget.action.APPWIDGET_UPDATE" />
             </intent-filter>
             <meta-data
