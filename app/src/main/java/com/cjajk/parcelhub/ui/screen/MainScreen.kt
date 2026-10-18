@@ -91,7 +91,6 @@ val CodeGreen = Color(0xFF30D158)
 val AccentBlue = Color(0xFF0A84FF)
 val WarnOrange = Color(0xFFFF9F0A)
 
-// 平台入口配色（类似参考图的彩色卡片）
 val TaobaoOrange = Color(0xFFFF6600)
 val PddRed = Color(0xFFE02020)
 val CainiaoGreen = Color(0xFF00B42A)
@@ -116,6 +115,7 @@ private fun defaultPlatforms(context: Context) = listOf(
 
 private const val SP_ORDER = "platform_order"
 private const val SP_SIDE_OFFSET = "side_bar_offset"
+private const val SP_VERTICAL = "vertical_bar"
 
 @OptIn(ExperimentalMaterial3Api::class, androidx.compose.foundation.ExperimentalFoundationApi::class)
 @Composable
@@ -146,25 +146,26 @@ fun MainScreen(vm: MainViewModel) {
         onDispose { context.unregisterReceiver(receiver) }
     }
 
-    var verticalBar by remember { mutableStateOf(false) }
     val sp = remember { context.getSharedPreferences("parcel_hub", Context.MODE_PRIVATE) }
+    // 记住转置状态：上次是横的还是竖的
+    var verticalBar by remember { mutableStateOf(sp.getBoolean(SP_VERTICAL, false)) }
     var sideOffsetPx by remember { mutableIntStateOf(sp.getInt(SP_SIDE_OFFSET, 0)) }
 
     val barAngle by animateFloatAsState(
         targetValue = if (verticalBar) 90f else 0f,
-        animationSpec = tween(durationMillis = 340, easing = FastOutSlowInEasing),
+        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
         label = "barAngle"
     )
     val angleSettled = barAngle <= 0.5f || barAngle >= 89.5f
 
     val bottomPad by animateDpAsState(
         targetValue = if (verticalBar) 0.dp else 84.dp,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
         label = "bottomPad"
     )
     val endPad by animateDpAsState(
         targetValue = if (verticalBar) 64.dp else 0.dp,
-        animationSpec = spring(stiffness = Spring.StiffnessMediumLow),
+        animationSpec = tween(durationMillis = 280, easing = FastOutSlowInEasing),
         label = "endPad"
     )
 
@@ -263,7 +264,10 @@ fun MainScreen(vm: MainViewModel) {
                         alpha = (1f - barAngle / 90f).coerceIn(0f, 1f)
                     }
             ) {
-                GlassBottomBar(onToggleVertical = { verticalBar = true })
+                GlassBottomBar(onToggleVertical = {
+                    verticalBar = true
+                    sp.edit().putBoolean(SP_VERTICAL, true).apply()
+                })
             }
         }
 
@@ -277,7 +281,10 @@ fun MainScreen(vm: MainViewModel) {
                     }
             ) {
                 VerticalBarStandalone(
-                    onToggleVertical = { verticalBar = false },
+                    onToggleVertical = {
+                        verticalBar = false
+                        sp.edit().putBoolean(SP_VERTICAL, false).apply()
+                    },
                     offsetPx = sideOffsetPx,
                     onOffsetChange = { sideOffsetPx = it },
                     onOffsetCommit = { px ->
@@ -354,7 +361,6 @@ fun MainScreen(vm: MainViewModel) {
     }
 }
 
-/** 快捷取件页：身份码 + 待取列表 */
 @Composable
 private fun QuickAccessPage() {
     val context = LocalContext.current
