@@ -108,13 +108,15 @@ object DeepLinks {
         }
     }
 
-    /** 京东待取快递 */
+    /** 京东出库码（直达校园取件条形码页） */
     fun openJd(context: Context) {
         val pkg = "com.jingdong.app.mall"
         val web = "https://order.jd.com/center/list.action"
-        val jdParams = Uri.encode("{\"category\":\"jump\",\"des\":\"orderlist\"}")
+        val jdIdentityParams = Uri.encode("{\"category\":\"jump\",\"des\":\"express/identity_code\"}")
+        val jdOrderParams = Uri.encode("{\"category\":\"jump\",\"des\":\"orderlist\"}")
         val uris = listOf(
-            "openjd://virtual?params=$jdParams"
+            "openjd://virtual?params=$jdIdentityParams",
+            "openjd://virtual?params=$jdOrderParams"
         )
         for (u in uris) {
             if (tryOpen(context, u, pkg)) return
